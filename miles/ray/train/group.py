@@ -88,6 +88,7 @@ class TrainerController:
         self._checkpoint_load: MegatronCheckpointLoad | None = None
 
         self._indep_dp_quorum_id = 0
+        self._has_trained_since_load = False
         self._indep_dp_store: Any | None = None
         self._indep_dp_store_addr: str | None = None
 
@@ -230,6 +231,8 @@ class TrainerController:
             except Exception:
                 remove_train_output_refs(worker_results)
                 raise
+
+            self._has_trained_since_load = True
 
             self._log_step_end_event(
                 rollout_id=rollout_id,
@@ -425,6 +428,7 @@ class TrainerController:
     async def load_state(self, request: TrainerControllerInitRequest) -> list[Any]:
         await self._wait_for_reload_cells()
 
+        self._has_trained_since_load = False
         self._checkpoint_load = request.checkpoint_load
         cell_results = await gather_and_raise_first([cell.load_state(request.checkpoint_load) for cell in self._cells])
         self._debug_trainer_load_state_timestamp = time.time()
@@ -671,7 +675,9 @@ class TrainerController:
     # ------------------------ internals for stop/start ------------------------
 
     async def _refresh_cells(self, *, rollout_id: int) -> None:
-        snapshotted_healing_indices = [c.cell_index for c in self._cells if c.is_uninitialized]
+        snapshotted_healing_indices = [
+            c.cell_index for c in self._cells if c.is_uninitialized and self._has_trained_since_load
+        ]
         snapshotted_alive_indices = [c.cell_index for c in self._cells if c.is_alive]
         will_alive_indices = sorted(list(set(snapshotted_healing_indices + snapshotted_alive_indices)))
         all_states = [(c.cell_index, c.state_name) for c in self._cells]
