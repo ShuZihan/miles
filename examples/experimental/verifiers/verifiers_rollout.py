@@ -562,7 +562,6 @@ def _make_eval_args(args: ImmutableNamespace) -> Namespace:
         ) is not None:  # config-access-exempt: the fixed eval-to-rollout mapping selects declared configuration fields by name
             setattr(eval_args, rollout_name, value)
     eval_args.rollout_max_prompt_len = args.eval_max_prompt_len
-    eval_args.rollout_min_new_tokens = args.eval_min_new_tokens
     eval_args.reward_key = args.eval_reward_key or args.reward_key
     return eval_args
 
@@ -639,7 +638,9 @@ class VerifiersRolloutFn(BaseRolloutFn):
         self.model = self.args.hf_checkpoint
         self.sampling = self._sampling_config(runtime.SamplingConfig, self.args)
         self.eval_args = _make_eval_args(self.args)
-        self.eval_sampling = self._sampling_config(runtime.SamplingConfig, self.eval_args)
+        self.eval_sampling = self._sampling_config(
+            runtime.SamplingConfig, self.eval_args, min_tokens=self.args.eval_min_new_tokens
+        )
 
         engine_count = max(self.args.inference_runtime_mut_state.engine_count, 1)
         self.max_concurrent = self.args.sglang_server_concurrency * engine_count
@@ -669,7 +670,9 @@ class VerifiersRolloutFn(BaseRolloutFn):
         self._next_sample_index = 0
 
     @staticmethod
-    def _sampling_config(SamplingConfig, args: Namespace):
+    def _sampling_config(
+        SamplingConfig: Any, args: Namespace | ImmutableNamespace, *, min_tokens: int | None = None
+    ) -> Any:
         data: dict[str, Any] = {
             "temperature": args.rollout_temperature,
             "top_p": args.rollout_top_p,
@@ -677,7 +680,7 @@ class VerifiersRolloutFn(BaseRolloutFn):
         }
         if args.rollout_top_k is not None:
             data["top_k"] = args.rollout_top_k
-        if (min_tokens := args.rollout_min_new_tokens) is not None:
+        if min_tokens is not None:
             data["min_tokens"] = min_tokens
         if args.apply_chat_template_kwargs:
             data["extra_body"] = {"chat_template_kwargs": args.apply_chat_template_kwargs}
