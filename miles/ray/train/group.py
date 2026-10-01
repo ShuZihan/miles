@@ -59,8 +59,8 @@ _RETRY_MAX_ATTEMPTS = 30
 _CELLS_READY_TIMEOUT_SECONDS = 3600.0
 
 
-def compute_trainer_health_checker_config(args, *, expected_num_cells: int) -> SimpleHealthCheckerConfig | None:
-    if expected_num_cells == 1:
+def compute_trainer_health_checker_config(args: TrainerConfig) -> SimpleHealthCheckerConfig | None:
+    if not args.indep_dp:
         return None
     return SimpleHealthCheckerConfig.from_args(args, prefix="trainer_heartbeat_checker")
 
@@ -379,12 +379,10 @@ class TrainerController:
         )
         object_store.init_instance(args, contribute_segment=False)
 
-        if self._expected_num_cells > 1:
+        if args.indep_dp:
             self._indep_dp_store, self._indep_dp_store_addr = create_tcp_store()
 
-        self._health_checker_config = compute_trainer_health_checker_config(
-            args, expected_num_cells=self._expected_num_cells
-        )
+        self._health_checker_config = compute_trainer_health_checker_config(args)
 
         self._witness_allocator: WitnessIdAllocator | None = (
             WitnessIdAllocator(buffer_size=args.witness_buffer_size) if args.enable_witness else None
