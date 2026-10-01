@@ -62,22 +62,32 @@ def add_user_provided_function_arguments(
 def resolve_custom_function_configs(args: argparse.Namespace, *, config_class: type[BaseConfig] | None = None) -> None:
     custom_arg_names: set[str] = set()
     for info in _compute_custom_function_field_infos(args, config_class=config_class):
-        config = None
-        if (function_config_class := info.config_class) is not None:
-            field_names = set(function_config_class.model_fields)
-            if issubclass(function_config_class, _LegacyCustomFunctionConfig):
-                field_names.update(function_config_class._suppressed_argument_names)
-            config = function_config_class.model_validate(
-                {
-                    key: getattr(args, key) for key in field_names if hasattr(args, key)
-                }  # config-access-exempt: schema-selected fields
-            )
-            custom_arg_names.update(field_names)
-        setattr(args, info.name, CustomFunctionConfig(path=info.path, config=config))
+        resolved = resolve_custom_function_config(path=info.path, args=args)
+        if resolved.config is not None:
+            custom_arg_names.update(_custom_config_field_names(type(resolved.config)))
+        setattr(args, info.name, resolved)
 
     for name in custom_arg_names:
         if hasattr(args, name):  # config-access-exempt: schema-selected field
             delattr(args, name)
+
+
+def resolve_custom_function_config(*, path: str, args: argparse.Namespace) -> CustomFunctionConfig:
+    config = None
+    if (config_class := _compute_config_class(load_function(path), path=path)) is not None:
+        config = config_class.model_validate(
+            {
+                key: getattr(args, key) for key in _custom_config_field_names(config_class) if hasattr(args, key)
+            }  # config-access-exempt: schema-selected fields
+        )
+    return CustomFunctionConfig(path=path, config=config)
+
+
+def _custom_config_field_names(config_class: type[BaseConfig]) -> set[str]:
+    field_names = set(config_class.model_fields)
+    if issubclass(config_class, _LegacyCustomFunctionConfig):
+        field_names.update(config_class._suppressed_argument_names)
+    return field_names
 
 
 @dataclass(frozen=True)

@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Literal
 import pydantic
 import yaml
 
+from miles.utils.args.custom_function import CustomFunctionConfig, resolve_custom_function_config
 from miles.utils.args.enhanced_argparse_namespace import EnhancedArgparseNamespace, SerializableConfigDict
 from miles.utils.file_arg_utils import resolve_file_arg
 from miles.utils.megatron_args_utils import compute_trainer_num_cells
@@ -368,6 +369,18 @@ def compute_trainer_args(args: Namespace, trainer: MegatronTrainerConfig) -> Nam
             f"parser does not know"
         )
         setattr(ans, key, value)
+
+    if "custom_model_provider_path" in trainer.overrides and ans.custom_model_provider_path is not None:
+        original_provider = args.custom_model_provider_path
+        if (
+            isinstance(original_provider, CustomFunctionConfig)
+            and original_provider.path == ans.custom_model_provider_path
+        ):
+            ans.custom_model_provider_path = original_provider
+        else:
+            ans.custom_model_provider_path = resolve_custom_function_config(
+                path=ans.custom_model_provider_path, args=ans
+            )
 
     _apply_critical_derived_overrides(ans, base=args, trainer=trainer)
 
