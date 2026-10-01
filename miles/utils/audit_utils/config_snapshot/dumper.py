@@ -34,10 +34,10 @@ class ConfigSnapshotDumper:
         if args.ci_disable_config_snapshot or not args.ci_test:
             return
 
+        if not (record_directory := os.environ.get(SNAPSHOT_RECORD_DIR_ENV_VAR)):
+            return
         if not args.config_snapshot_name:
             raise ValueError("Snapshot name is required")
-        if not (record_directory := os.environ.get(SNAPSHOT_RECORD_DIR_ENV_VAR)):
-            raise ValueError(f"{SNAPSHOT_RECORD_DIR_ENV_VAR} is required for configuration snapshots")
         cls._state = _SnapshotState(
             storage=ConfigSnapshotStorage(directory=Path(record_directory)),
             context=ConfigSnapshotContext(
