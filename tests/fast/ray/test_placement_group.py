@@ -585,6 +585,7 @@ def _make_trainer_handle(
     handle.wait_idle = AsyncMock(return_value=None)
     handle.finalize_pending_checkpoint = AsyncMock(return_value=None)
     handle.init = AsyncMock(return_value=[0])
+    handle.get_initial_start_rollout_id = AsyncMock(return_value=None)
     handle.load_state = AsyncMock(return_value=[0])
     handle.get_deployment_identity = AsyncMock(return_value=deployment_identity)
     handle.get_train_parallel_config = AsyncMock(return_value=None)
@@ -840,6 +841,7 @@ class TestCreateTrainingModel:
     def _handle(*, restored: list[int]) -> MagicMock:
         handle = MagicMock()
         handle.init = AsyncMock(return_value=restored)
+        handle.get_initial_start_rollout_id = AsyncMock(return_value=None)
         handle.load_state = AsyncMock(return_value=restored)
         return handle
 

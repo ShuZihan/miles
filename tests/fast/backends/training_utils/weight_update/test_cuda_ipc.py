@@ -1,7 +1,7 @@
 import asyncio
 from argparse import Namespace
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 import torch
@@ -70,8 +70,9 @@ class TestConnect:
         )
         protocol.rollout_engines = None
         protocol._model_update_groups = None
-        protocol._ipc_gather_group = MagicMock(name="gather_group_from_init")
-        protocol._ipc_gather_src = 0
+        protocol._ipc_gather_group = None
+        protocol._ipc_gather_src = None
+        protocol._ipc_layout = None
         return protocol
 
     @staticmethod
@@ -113,8 +114,6 @@ class TestConnect:
         """Only remote engines use NCCL, while ranks on either side of a sparse gap map to their covered colocated engine."""
         engines = [MagicMock(name=f"engine{i}") for i in range(4)]
         protocol = self._make_protocol()
-        protocol._ipc_gather_src = expected_gather_src
-        gather_group_from_init = protocol._ipc_gather_group
 
         dist_mock, connect, disconnect = self._connect(protocol, engines, rank=rank, tp_rank=0)
 
@@ -125,23 +124,33 @@ class TestConnect:
         disconnect.assert_not_called()
         assert protocol._model_update_groups is connect.return_value
         assert protocol._ipc_engine is engines[expected_engine_index]
-        assert protocol._ipc_gather_group is gather_group_from_init
+        assert protocol._ipc_gather_group is dist_mock.new_group.return_value
         assert protocol._ipc_gather_src == expected_gather_src
         assert protocol.is_sender is True
-        dist_mock.new_group.assert_not_called()
+        assert dist_mock.new_group.call_args_list == [
+            call(ranks=[0, 1], backend="gloo"),
+            call(ranks=[2, 3], backend="gloo"),
+            call(ranks=[6, 7], backend="gloo"),
+        ]
+        dist_mock.destroy_process_group.assert_not_called()
 
     def test_connect_clears_ipc_state_for_a_placeholder_rank(self) -> None:
         """A reserved GPU slot that no engine covers drops its stale gather group, or it would enter a collective nobody else joins."""
         engines = [MagicMock(name=f"engine{i}") for i in range(4)]
         protocol = self._make_protocol()
+        stale_group = MagicMock(name="stale_gather_group")
+        protocol._ipc_gather_group = stale_group
+        protocol._ipc_gather_src = 4
+        protocol._ipc_layout = ((4, 2),)
 
-        _dist_mock, connect, _disconnect = self._connect(protocol, engines, rank=4, tp_rank=1)
+        dist_mock, connect, _disconnect = self._connect(protocol, engines, rank=4, tp_rank=1)
 
         assert protocol._ipc_gather_group is None
         assert protocol._ipc_gather_src is None
         assert protocol._ipc_engine is None
         assert protocol.is_sender is False
         connect.assert_not_called()
+        dist_mock.destroy_process_group.assert_called_once_with(stale_group)
 
 
 class TestColocatedBaseSend:

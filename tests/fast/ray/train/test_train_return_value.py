@@ -24,6 +24,7 @@ def _make_controller(cells: list) -> TrainerController:
     group.args = SimpleNamespace(enable_event_analyzer=False, save_debug_event_data=None)
     group._witness_allocator = None
     group._indep_dp_quorum_id = 0
+    group._has_trained_since_load = False
     group._health_checker_activeness = ActivenessTracker(active=True)
     group._test_action_executor = SimpleNamespace(run_after_step=AsyncMock())
     return group

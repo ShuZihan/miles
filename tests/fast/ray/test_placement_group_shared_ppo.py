@@ -232,6 +232,10 @@ def _patch_train_controller_handles(monkeypatch, *, restored: dict[str, list[int
             self.inited_with = request
             return (restored or {}).get(self.trainer_id, [0])
 
+        async def get_initial_start_rollout_id(self) -> int | None:
+            calls.append((self.trainer_id, "get_initial_start_rollout_id"))
+            return None
+
         async def get_train_parallel_config(self) -> TrainParallelConfig | None:
             calls.append((self.trainer_id, "get_train_parallel_config"))
             return make_train_parallel_config(dp_size=2 if self.trainer_id == "actor" else 99)
@@ -419,7 +423,13 @@ async def test_the_controllers_are_inited_before_the_driver_calls_them(monkeypat
         capability=FakeBackendCapability(),
     )
 
-    assert handles[0].calls == [("actor", "init"), ("critic", "init"), ("actor", "get_train_parallel_config")]
+    assert handles[0].calls == [
+        ("actor", "init"),
+        ("actor", "get_initial_start_rollout_id"),
+        ("critic", "init"),
+        ("critic", "get_initial_start_rollout_id"),
+        ("actor", "get_train_parallel_config"),
+    ]
 
 
 async def test_a_run_without_a_critic_starts_only_the_actor_controller(monkeypatch, tmp_path):

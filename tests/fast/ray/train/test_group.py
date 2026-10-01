@@ -130,10 +130,8 @@ def _make_controller(
         cell_provider=make_provider(),
         cell_operations=AsyncMock(),
     )
-    group._health_checker_config = compute_trainer_health_checker_config(
-        group.args, expected_num_cells=group._expected_num_cells
-    )
-    if group._expected_num_cells > 1:
+    group._health_checker_config = compute_trainer_health_checker_config(group.args)
+    if group.args.indep_dp:
         group._indep_dp_store, group._indep_dp_store_addr = group_module.create_tcp_store()
     for cell_index in range(num_cells):
         cell = group._create_cell(
@@ -183,10 +181,13 @@ async def _init_controller(group: TrainerController) -> None:
     await group.init(TrainerControllerInitRequest(num_rollout=None, wandb_run_id=None, mlflow_run_id=None))
 
 
-async def _make_alive_controller(*, num_cells: int = 3, **kwargs) -> TrainerController:
+async def _make_alive_controller(
+    *, num_cells: int = 3, has_trained_since_load: bool = False, **kwargs: Any
+) -> TrainerController:
     """Create a group and init all cells to alive."""
     group = _make_controller(num_cells=num_cells, **kwargs)
     await _init_controller(group)
+    group._has_trained_since_load = has_trained_since_load
     return group
 
 
@@ -216,11 +217,11 @@ class TestIndepDPStore:
 
         assert group._indep_dp_store_addr == train_conftest.FAKE_STORE_ADDR
 
-    def test_a_single_cell_pool_needs_no_quorum_store(self):
-        """One cell never renegotiates a quorum, so binding a port for it would be pure waste."""
+    def test_a_single_cell_independent_dp_pool_gets_a_quorum_store(self):
+        """An independent DP pool needs its store even when only one cell starts."""
         group = _make_controller(num_cells=1)
 
-        assert group._indep_dp_store_addr is None
+        assert group._indep_dp_store_addr == train_conftest.FAKE_STORE_ADDR
 
 
 class TestInit:
@@ -459,7 +460,7 @@ class TestRefreshCellsReconfigure:
 class TestRefreshCellsHealing:
     async def test_pending_cell_gets_healed(self):
         """A pending cell goes through allocate + healing with correct alive_rank."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
 
         # Step 1: Stop cell 2, then start it (pending)
         await _stop_cell(group, 2)
@@ -490,7 +491,7 @@ class TestRefreshCellsHealing:
 
     async def test_multiple_pending_cells_healed(self):
         """Multiple pending cells healed simultaneously."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
         await _stop_cell(group, 1)
         await _stop_cell(group, 2)
         _start_cell(group, 1)
@@ -512,7 +513,7 @@ class TestRefreshCellsHealing:
 
     async def test_pending_cell_with_stopped_cell(self):
         """Pending + stopped: only alive and pending participate, stopped excluded."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
 
         # cell 1 stopped (not restarted), cell 2 pending
         await _stop_cell(group, 1)
@@ -545,7 +546,7 @@ class TestRefreshCellsReconfigureEvent:
 
     async def test_healing_emits_event_with_src_and_healed_cells(self, _event_log_dir: Path):
         """A healing reconfigure emits one CellReconfigureEvent naming rollout, src cell, and healed cells."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
         await _stop_cell(group, 2)
         _start_cell(group, 2)
 
@@ -583,7 +584,7 @@ class TestRefreshCellsReconfigureEvent:
 
     async def test_failed_healing_emits_no_event(self, _event_log_dir: Path):
         """When cooperative prepare fails, no CellReconfigureEvent is emitted (witness stays absent)."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
         await _stop_cell(group, 2)
         train_conftest.fake_worker_manager.fail_init_for_cell(2)
         _start_cell(group, 2)
@@ -596,7 +597,7 @@ class TestRefreshCellsReconfigureEvent:
         self, _event_log_dir: Path
     ) -> None:
         """The event maps exactly the alive cells to the incarnation each one has after the heal."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
         await _stop_cell(group, 2)
         _start_cell(group, 2)
 
@@ -659,7 +660,7 @@ class TestRefreshCellsNoOp:
 class TestConsecutiveStopStartCycles:
     async def test_stop_train_stop_train_start_train(self):
         """Consecutive: stop 1 → refresh → stop 2 → refresh → start 1 → refresh."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
 
         # Step 1: Stop cell 1
         await _stop_cell(group, 1)
@@ -771,7 +772,7 @@ class TestTrain:
 
     async def test_rapid_stop_start_before_train(self):
         """Cell stopped and immediately started before next train — healed in one shot."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
 
         await _stop_cell(group, 1)
         _start_cell(group, 1)
@@ -940,7 +941,7 @@ class TestRefreshCellsErrorHandling:
     async def test_healing_failure_marks_pending_cell_errored_keeps_alive(self):
         """When healing init fails, the pending cell is killed and stopped (via _execute_raw's
         except path, which marks errored then confirms-dead), alive cells unaffected."""
-        group = await _make_alive_controller(num_cells=3)
+        group = await _make_alive_controller(num_cells=3, has_trained_since_load=True)
 
         # Step 1: Stop cell 2 and start it (pending)
         await _stop_cell(group, 2)
