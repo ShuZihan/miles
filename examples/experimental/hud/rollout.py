@@ -44,6 +44,7 @@ from typing import Any
 
 from PIL import Image as PILImage
 
+from miles.rollout.base_types import GenerateFnInput, GenerateFnOutput
 from miles.utils.args.schema import A, Arg, BaseConfig
 from miles.utils.types import Sample
 
@@ -395,15 +396,14 @@ def _failed(sample: Sample, reason: str, state: Any) -> Sample:
     return sample
 
 
-async def generate(args: Any, sample: Sample, sampling_params) -> Sample:
+async def generate(input: GenerateFnInput) -> GenerateFnOutput:
+    args, sample, sampling_params = input.args, input.sample, input.sampling_params
     assert not args.partial_rollout, "Partial rollout is not supported for HUD rollouts."
 
-    # In-function on purpose: sglang_rollout pulls in sglang_router, which only
-    # exists on a training node; keeping it out of module scope is what lets
-    # the offline tests import everything above.
-    from miles.rollout.sglang_rollout import GenerateState  # noqa: PLC0415
-
-    state = GenerateState(args)
+    # The caller supplies the state without importing sglang_rollout, which
+    # pulls in sglang_router on training nodes, so offline tests can still
+    # import this module.
+    state = input.state
     meta = (sample.metadata or {}).get("hud_task")
     if not meta:
         raise ValueError("no HUD task row: expected sample.metadata['hud_task'] = {env, id, args}")
@@ -423,13 +423,13 @@ async def generate(args: Any, sample: Sample, sampling_params) -> Sample:
             # systematic failure still shows up as a rising drop count rather
             # than as silence.
             logger.warning("hud episode failed to run: %s", e, exc_info=True)
-            return _failed(sample, f"hud episode errored: {type(e).__name__}", state)
+            return GenerateFnOutput(samples=_failed(sample, f"hud episode errored: {type(e).__name__}", state))
 
     run = (getattr(job, "runs", None) or [None])[
         0
     ]  # config-access-exempt: HUD jobs interrupted before an episode completes may have no runs
     if run is None:
-        return _failed(sample, "hud episode produced no run", state)
+        return GenerateFnOutput(samples=_failed(sample, "hud episode produced no run", state))
 
     sample.metadata["reward"] = float(run.reward or 0.0)
     sample.metadata["hud_trace_status"] = str(run.trace.status)
@@ -439,19 +439,21 @@ async def generate(args: Any, sample: Sample, sampling_params) -> Sample:
     if stitched is None:
         # No token data, or the prefix property broke. Either way there is
         # nothing safe to train on in this episode.
-        return _failed(sample, f"hud episode unusable (turns={len(turns)}, stitch broke)", state)
+        return GenerateFnOutput(
+            samples=_failed(sample, f"hud episode unusable (turns={len(turns)}, stitch broke)", state)
+        )
 
     tokens, loss_mask, logprobs, response_start = stitched
     try:
         vision = _vision_inputs(state, _collect_images(run), tokens)
     except ValueError as e:
-        return _failed(sample, f"hud episode dropped: {e}", state)
+        return GenerateFnOutput(samples=_failed(sample, f"hud episode dropped: {e}", state))
     if vision is None:
         # The stitch ended before the first screenshot came back, so the kept
         # turns are text-only. Written off for the same vision-tower collective
         # parity that shapes _failed -- and there is next to nothing to learn
         # from a turn the harness could not even parse a tool call out of.
-        return _failed(sample, "hud episode kept no screenshot", state)
+        return GenerateFnOutput(samples=_failed(sample, "hud episode kept no screenshot", state))
     sample.multimodal_train_inputs = vision
 
     sample.tokens = tokens
@@ -468,7 +470,7 @@ async def generate(args: Any, sample: Sample, sampling_params) -> Sample:
         len(tokens),
         sample.response_length,
     )
-    return sample
+    return GenerateFnOutput(samples=sample)
 
 
 async def reward_func(args, samples: Sample | list[Sample], **kwargs) -> float | list[float]:
