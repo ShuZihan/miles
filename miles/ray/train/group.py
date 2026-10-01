@@ -398,17 +398,19 @@ class TrainerController:
         self._watcher_disposer = await self._provider.watch_cells(self._reconcile)
         await self._wait_expected_num_cells()
 
+        initial_cells = self._cells
+        initial_cell_indices = [cell.cell_index for cell in initial_cells]
         cell_results = await asyncio.gather(
             *[
                 cell.init(
                     indep_dp_info=self._compute_indep_dp_info(
                         cell_index=cell.cell_index,
                         # all cells will be alive for this first initialization
-                        alive_cell_indices=list(range(len(self._cells))),
+                        alive_cell_indices=initial_cell_indices,
                     ),
                     indep_dp_store_addr=self._indep_dp_store_addr,
                 )
-                for cell in self._cells
+                for cell in initial_cells
             ]
         )
         return [item for sublist in cell_results for item in sublist]
