@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from miles.utils.args.schema import validate_complete_config
+from miles.utils.env_report.launcher_report import LAUNCHER_REPORT_ENV_VAR
 from miles.utils.workers.argv_utils import ORCHESTRATOR_CONFIG_FLAG, orchestrator_config_values
 from miles.utils.workers.serving.worker_config import OrchestratorWorkerConfig, ServeWorkerConfig
 
@@ -65,7 +66,10 @@ def parse_own_args(own_argv: list[str]) -> argparse.Namespace:
 
 
 def parse_serve_worker_config(value: str) -> ServeWorkerConfig:
-    return validate_complete_config(config_class=ServeWorkerConfig, payload=json.loads(value))
+    config = validate_complete_config(config_class=ServeWorkerConfig, payload=json.loads(value))
+    if config.args.get("env_report") == "" and (report_path := os.environ.get(LAUNCHER_REPORT_ENV_VAR)):
+        config = config.model_copy(update={"args": config.args | {"env_report": report_path}})
+    return config
 
 
 def parse_orchestrator_argv(argv: list[str]) -> OrchestratorWorkerConfig:
