@@ -1677,7 +1677,7 @@ def validate_async_off_policy_correction(args) -> None:
     )
 
 
-def _maybe_apply_dumper_overrides(args) -> None:
+def _maybe_apply_dumper_overrides(args: argparse.Namespace) -> None:
     if not args.dumper_enable:
         return
 
@@ -1696,7 +1696,8 @@ def _maybe_apply_dumper_overrides(args) -> None:
     args.eval_interval = None
     args.save = None
     args.save_interval = None
-    args.save_retain_interval = None
+    if args.train_backend == "megatron":
+        args.save_retain_interval = None
 
 
 def resolve_fsdp_num_layers(hf_config) -> int | None:
