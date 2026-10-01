@@ -5,6 +5,7 @@ import traceback
 from copy import deepcopy
 
 from miles.rollout.rm_hub import batched_async_rm
+from miles.utils.args.custom_view import ImmutableNamespace
 from miles.utils.http_utils import post
 from miles.utils.types import Sample
 
@@ -197,7 +198,9 @@ async def run_agent_system(args, sample):
     tasks = [solver_worker(args, problem_statement, worker_id) for worker_id in range(args.num_parallel)]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    rewards = await batched_async_rm(args, args.results_dict["solver"])
+    rewards = await batched_async_rm(
+        args=ImmutableNamespace.model_validate(vars(args)), samples=args.results_dict["solver"]
+    )
     for sample, reward in zip(args.results_dict["solver"], rewards, strict=False):
         sample.reward = reward
 
@@ -225,7 +228,9 @@ async def run_agent_system(args, sample):
         if isinstance(result, str):
             rewrited_solutions.append(result)
 
-    rewards = await batched_async_rm(args, args.results_dict["rewriter"])
+    rewards = await batched_async_rm(
+        args=ImmutableNamespace.model_validate(vars(args)), samples=args.results_dict["rewriter"]
+    )
     for sample, reward in zip(args.results_dict["rewriter"], rewards, strict=False):
         sample.reward = reward
 
