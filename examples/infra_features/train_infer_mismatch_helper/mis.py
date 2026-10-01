@@ -14,7 +14,7 @@ class MisConfig(BaseConfig):
     tis_upper_bound: A[float, Arg()] = 2.0
     rs_lower_bound: A[float | None, Arg()] = None
     rs_upper_bound: A[float | None, Arg()] = None
-    rs_veto_threshold: A[float, Arg()] = 1.0e-4
+    rs_veto_threshold: A[float | None, Arg()] = 1.0e-4
     tis_batch_normalize: A[bool, Arg()] = False
 
 
