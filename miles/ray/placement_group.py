@@ -214,6 +214,9 @@ async def create_training_model(
     assert len(set(restored_rollout_ids)) == 1, f"trainer {trainer_id!r} restored {restored_rollout_ids}"
     [restored_rollout_id] = set(restored_rollout_ids)
 
+    if not resumed and requested_start_rollout_id is None:
+        requested_start_rollout_id = await handle.get_initial_start_rollout_id()
+
     if (x := requested_start_rollout_id) is None:
         start_rollout_id = restored_rollout_id
     else:

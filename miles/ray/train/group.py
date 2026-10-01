@@ -421,6 +421,9 @@ class TrainerController:
     async def is_initialized(self) -> bool:
         return self._init_once.is_initialized()
 
+    async def get_initial_start_rollout_id(self) -> int | None:
+        return self.args.start_rollout_id
+
     async def finalize_pending_checkpoint(self) -> None:
         await self._wait_for_reload_cells()
         await gather_and_raise_first([cell.execute("finalize_pending_checkpoint") for cell in self._cells])
