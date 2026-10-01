@@ -10,8 +10,6 @@ from megatron.training.arguments import parse_args, validate_args
 from megatron.training.checkpointing import get_checkpoint_tracker_filename, save_checkpoint
 from megatron.training.training import get_model
 
-import miles_plugins.mbridge  # noqa: F401
-from mbridge import AutoBridge
 from miles.backends.megatron_utils.arguments import set_default_megatron_args
 from miles.backends.megatron_utils.checkpoint import publish_as_release
 from miles.backends.megatron_utils.fp32_param_utils import enforce_marked_param_dtypes
@@ -136,6 +134,9 @@ def _configure_pipeline_parallel(args: Namespace, *, world_size: int) -> None:
 
 
 def main():
+    import miles_plugins.mbridge  # noqa: F401
+    from mbridge import AutoBridge
+
     configure_logger_raw()
 
     # Initialize distributed environment
