@@ -145,7 +145,10 @@ def _adapt_legacy_custom_config(add_arguments: Callable[[argparse.ArgumentParser
     }
     config_class = create_model("LegacyCustomFunctionConfig", __base__=BaseConfig, **fields)
 
-    config_class.add_arguments = add_arguments
+    def _add_arguments(parser: argparse.ArgumentParser) -> Any:
+        return add_arguments(parser)
+
+    config_class.add_arguments = staticmethod(_add_arguments)
     return config_class
 
 
