@@ -11,7 +11,7 @@ pipeline (sglang + miles-router with session support) is launched, ``train`` is
 skipped, and the rollout drives ``session_verify_agent.run_agent`` against the
 session server.
 
-Args flow through miles' canonical ``parse_args`` Namespace.
+Args flow through an explicit Namespace projection of miles' canonical config.
 
 # Backend choice
 
@@ -84,25 +84,13 @@ SESSION_VERIFY_INVARIANT_ARGS: dict[str, Any] = {
 def session_verify_extras(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """``add_custom_arguments`` hook for ``miles.utils.arguments.parse_args``.
 
-    Adds the wrapper-only ``--assistant-text-threshold`` knob (a post-process
-    gate on the per-sample metrics JSONL, NOT in ``train_args``) and applies
-    session-verify invariants as parser defaults — user CLI still overrides
-    these via the canonical miles flags.
+    Applies canonical session-verify invariants as parser defaults — user
+    CLI still overrides these via the canonical miles flags. Wrapper-only
+    options are parsed separately by the CLI entrypoint.
     """
-    parser.add_argument(
-        "--assistant-text-threshold",
-        type=float,
-        default=ASSISTANT_TEXT_MISMATCH_RATIO_THRESHOLD,
-        help=(
-            "Soft threshold for assistant_text mismatch ratio.  Default 0.1.  "
-            "Raise to 1.0 for families whose upstream sglang reasoning parser "
-            "is known to roundtrip imperfectly (e.g. nemotron_3 keeps a "
-            "trailing newline in reasoning_content) — hard mismatches still "
-            "gate.  Post-process gate on per-sample JSONL metrics; not "
-            "forwarded to ``train_args``."
-        ),
+    parser.set_defaults(
+        **{name: value for name, value in SESSION_VERIFY_INVARIANT_ARGS.items() if name != "enable_spec"}
     )
-    parser.set_defaults(**SESSION_VERIFY_INVARIANT_ARGS)
     return parser
 
 
@@ -245,8 +233,8 @@ def run_session_verify(args: argparse.Namespace, *, wire_format: SessionWireForm
     ``args`` MUST be a fully-shaped Namespace carrying miles-canonical field
     names plus the session-verify-specific fields (``session_verify_cycles``,
     ``tool_call_failure_mode``, ``assistant_text_threshold``).  Build it via
-    ``parse_args(add_custom_arguments=session_verify_extras)`` for the CLI
-    path or by spreading ``SESSION_VERIFY_INVARIANT_ARGS`` into
+    the CLI entrypoint's config projection or by spreading
+    ``SESSION_VERIFY_INVARIANT_ARGS`` into
     ``argparse.Namespace(...)`` for tests.
 
     Mutates ``args`` in two places before composing train_args:

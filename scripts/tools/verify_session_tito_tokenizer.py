@@ -48,16 +48,28 @@ Usage examples::
 
 from __future__ import annotations
 
+import argparse
 import logging
 import sys
 
+from miles.utils.args.custom_view import compute_custom_function_config
+from miles.utils.args.runtime import AllConfig
+from miles.utils.args.schema import A, Arg, BaseConfig
 from miles.utils.arguments import parse_args
 from miles.utils.test_utils.session_verify_agent import fixed_template_append_roles, select_schedule
 from miles.utils.test_utils.session_verify_runner import (
+    ASSISTANT_TEXT_MISMATCH_RATIO_THRESHOLD,
     SESSION_VERIFY_INVARIANT_ARGS,
     run_session_verify,
     session_verify_extras,
 )
+
+
+class _VerifierConfig(BaseConfig):
+    assistant_text_threshold: A[
+        float,
+        Arg(help="Soft threshold for assistant_text mismatch ratio in per-sample metrics."),
+    ] = ASSISTANT_TEXT_MISMATCH_RATIO_THRESHOLD
 
 
 def _with_session_verify_defaults(argv: list[str]) -> list[str]:
@@ -121,8 +133,12 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    sys.argv[1:] = _with_session_verify_defaults(sys.argv[1:])
-    args = parse_args(add_custom_arguments=session_verify_extras)
+    tool_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    _VerifierConfig.add_arguments(parser=tool_parser)
+    tool_args, remaining = tool_parser.parse_known_args()
+    verifier = _VerifierConfig.model_validate(vars(tool_args))
+    sys.argv[1:] = _with_session_verify_defaults(remaining)
+    args = _runner_args(config=parse_args(add_custom_arguments=session_verify_extras), verifier=verifier)
 
     # Resolve the family-owned capability before any GPU work starts so an
     # unsupported verifier schedule fails immediately.
@@ -163,6 +179,60 @@ def main() -> int:
         "across all required driver actions."
     )
     return 0
+
+
+def _runner_args(*, config: AllConfig, verifier: _VerifierConfig) -> argparse.Namespace:
+    assert config.custom_generate_function_path is not None
+    assert config.custom_agent_function_path is not None
+    custom = compute_custom_function_config(
+        config,
+        config.custom_generate_function_path,
+        nested_functions=(config.custom_agent_function_path,),
+    )
+    return argparse.Namespace(
+        hf_checkpoint=config.hf_checkpoint,
+        prompt_data=config.prompt_data,
+        input_key=config.input_key,
+        num_rollout=config.num_rollout,
+        rollout_batch_size=config.rollout_batch_size,
+        n_samples_per_prompt=config.n_samples_per_prompt,
+        rollout_max_response_len=config.rollout_max_response_len,
+        rollout_temperature=config.rollout_temperature,
+        global_batch_size=config.global_batch_size,
+        custom_generate_function_path=config.custom_generate_function_path.path,
+        custom_agent_function_path=config.custom_agent_function_path.path,
+        session_verify_cycles=custom.session_verify_cycles,
+        tool_call_failure_mode=custom.tool_call_failure_mode,
+        tito_model=config.tito_model,
+        session_message_matcher=config.session_message_matcher,
+        rollout_num_gpus_per_engine=config.rollout_num_gpus_per_engine,
+        rollout_num_gpus=config.rollout_num_gpus,
+        sglang_reasoning_parser=config.sglang.common_value("reasoning_parser"),
+        sglang_tool_call_parser=config.sglang.common_value("tool_call_parser"),
+        sglang_context_length=config.sglang.common_value("context_length"),
+        sglang_kv_cache_dtype=config.sglang.common_value("kv_cache_dtype"),
+        sglang_mamba_full_memory_ratio=config.sglang.common_value("mamba_full_memory_ratio"),
+        sglang_cuda_graph_max_bs_decode=(
+            config.sglang.common_value("cuda_graph_max_bs_decode")
+            if "cuda_graph_max_bs_decode" in config.sglang.base_args
+            else None
+        ),
+        sglang_cuda_graph_backend_prefill=config.sglang.common_value("cuda_graph_backend_prefill"),
+        sglang_ep_size=config.sglang.common_value("ep_size"),
+        rm_type=config.rm_type,
+        actor_num_nodes=config.actor_num_nodes,
+        actor_num_gpus_per_node=config.actor_num_gpus_per_node,
+        train_backend=config.train_backend,
+        use_session_server=config.use_session_server,
+        debug_rollout_only=config.debug_rollout_only,
+        ci_test=config.ci_test,
+        ci_tito_special_token_count_threshold=config.ci_tito_special_token_count_threshold,
+        enable_sample_ownership_checker=config.enable_sample_ownership_checker,
+        colocate=config.colocate,
+        enable_spec=SESSION_VERIFY_INVARIANT_ARGS["enable_spec"],
+        anthropic_intermediate_system_expectation=dict(custom).get("anthropic_intermediate_system_expectation"),
+        assistant_text_threshold=verifier.assistant_text_threshold,
+    )
 
 
 if __name__ == "__main__":
