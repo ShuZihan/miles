@@ -79,6 +79,7 @@ def _serve_session(backend_url: str) -> Iterator[str]:
         use_session_server="v1",
         use_rollout_routing_replay=True,
         use_rollout_indexer_replay=False,
+        rollout_indexer_topk_num_streams=None,
         use_sampling_support_replay=False,
         rollout_temperature=1.0,
         rollout_top_p=1.0,
