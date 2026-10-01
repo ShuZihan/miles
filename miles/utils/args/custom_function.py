@@ -1,7 +1,7 @@
 import argparse
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import ConfigDict, SerializeAsAny, create_model, model_validator
 
@@ -64,12 +64,15 @@ def resolve_custom_function_configs(args: argparse.Namespace, *, config_class: t
     for info in _compute_custom_function_field_infos(args, config_class=config_class):
         config = None
         if (function_config_class := info.config_class) is not None:
+            field_names = set(function_config_class.model_fields)
+            if issubclass(function_config_class, _LegacyCustomFunctionConfig):
+                field_names.update(function_config_class._suppressed_argument_names)
             config = function_config_class.model_validate(
                 {
-                    key: getattr(args, key) for key in function_config_class.model_fields if hasattr(args, key)
+                    key: getattr(args, key) for key in field_names if hasattr(args, key)
                 }  # config-access-exempt: schema-selected fields
             )
-            custom_arg_names.update(function_config_class.model_fields)
+            custom_arg_names.update(field_names)
         setattr(args, info.name, CustomFunctionConfig(path=info.path, config=config))
 
     for name in custom_arg_names:
@@ -138,18 +141,41 @@ def _adapt_legacy_custom_config(add_arguments: Callable[[argparse.ArgumentParser
     fields = {
         action.dest: (
             Any,
-            ... if action.required or action.default == argparse.SUPPRESS else action.default,
+            ... if action.required else action.default,
         )
         for action in parser._actions
-        if action.dest != argparse.SUPPRESS
+        if action.dest != argparse.SUPPRESS and (action.required or action.default != argparse.SUPPRESS)
     }
-    config_class = create_model("LegacyCustomFunctionConfig", __base__=BaseConfig, **fields)
+    config_class = create_model("LegacyCustomFunctionConfig", __base__=_LegacyCustomFunctionConfig, **fields)
+    config_class._suppressed_argument_names = frozenset(
+        action.dest
+        for action in parser._actions
+        if action.dest != argparse.SUPPRESS
+        and not action.required
+        and action.default == argparse.SUPPRESS
+        and action.dest not in fields
+    )
 
     def _add_arguments(parser: argparse.ArgumentParser) -> Any:
         return add_arguments(parser)
 
     config_class.add_arguments = staticmethod(_add_arguments)
     return config_class
+
+
+class _LegacyCustomFunctionConfig(BaseConfig):
+    model_config = ConfigDict(extra="allow")
+
+    _suppressed_argument_names: ClassVar[frozenset[str]] = frozenset()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_argument_names(cls, values: Any) -> Any:
+        if isinstance(values, Mapping):
+            unknown = values.keys() - cls.model_fields.keys() - cls._suppressed_argument_names
+            if unknown:
+                raise ValueError(f"Unknown legacy custom configuration fields: {sorted(unknown)}")
+        return values
 
 
 def _restore_custom_function_config(values: dict[str, Any]) -> CustomFunctionConfig:
