@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,7 +41,8 @@ class ConfigSnapshotTestRunner:
     @classmethod
     def create(cls, *, test: str, repo_root: Path) -> "ConfigSnapshotTestRunner":
         if not (record_directory := os.environ.get(SNAPSHOT_RECORD_DIR_ENV_VAR)):
-            raise ValueError(f"{SNAPSHOT_RECORD_DIR_ENV_VAR} is required for configuration snapshots")
+            record_directory = tempfile.mkdtemp(prefix="miles-config-snapshots-")
+            logger.info("Configuration snapshot records: %s", record_directory)
         root = Path(record_directory).resolve()
         directory = root / Path(test).stem / uuid.uuid4().hex
         attempt = cls(
