@@ -117,6 +117,10 @@ class TrainerConfig(
         return self.backend.global_batch_size
 
     @property
+    def micro_batch_size(self) -> int:
+        return self.backend.micro_batch_size
+
+    @property
     def wandb_project(self) -> str | None:
         return self.backend.wandb_project
 
