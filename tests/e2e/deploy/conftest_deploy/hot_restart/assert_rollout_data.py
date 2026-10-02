@@ -8,7 +8,10 @@ def assert_generations_recorded_their_steps(
     templates: Sequence[str], *, schedule: Sequence[ScheduledFreeze], num_rollouts: int
 ) -> None:
     directories = [Path(template).parent for template in templates]
-    stray = sorted(set(directories[0].parent.iterdir()) - set(directories))
+    allowed = set(directories)
+    if (dashboard := directories[0].parent / "dashboard_columns").is_dir():
+        allowed.add(dashboard)
+    stray = sorted(set(directories[0].parent.iterdir()) - allowed)
     assert not stray, (
         f"{directories[0].parent} holds {[one.name for one in stray]} beside the {len(templates)} generation "
         f"directories the take-overs relaunched with, so some executor wrote where nothing relaunched it"
