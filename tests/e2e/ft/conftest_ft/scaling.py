@@ -148,6 +148,11 @@ def run_scaling_scenario(
 
 
 def _build_train_args(*, mode: FTTestMode, dump_dir: Path) -> str:
+    weight_transfer_args = (
+        "--update-weight-transfer-mode p2p --sglang-remote-instance-weight-loader-start-seed-via-transfer-engine "
+        if "rollout" in mode.ft_components
+        else ""
+    )
     return (
         get_common_train_args(mode, dump_dir=str(dump_dir), num_steps=SCALING_NUM_ROLLOUTS, enable_dumper=False)
         + get_ft_args(mode, api_server_args=API_SERVER_ARGS)
@@ -156,6 +161,7 @@ def _build_train_args(*, mode: FTTestMode, dump_dir: Path) -> str:
         + "--mooncake-replica-num 2 "
         + f"--init-expected-num-cells {mode.rollout_num_engines} "
         + f"--trainer-init-expected-num-cells {mode.num_cells} "
+        + weight_transfer_args
         + get_train_env_vars_arg(mode, deterministic=False)
     )
 
