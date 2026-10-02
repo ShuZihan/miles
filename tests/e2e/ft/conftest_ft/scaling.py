@@ -160,7 +160,7 @@ def _build_train_args(*, mode: FTTestMode, dump_dir: Path) -> str:
         + "--trainer-heartbeat-checker-first-wait 0 "
         + "--mooncake-replica-num 2 "
         + f"--init-expected-num-cells {mode.rollout_num_engines} "
-        + f"--trainer-init-expected-num-cells {mode.num_cells} "
+        + f"--trainer-init-expected-num-cells {mode.num_cells if 'train' in mode.ft_components else 1} "
         + weight_transfer_args
         + get_train_env_vars_arg(mode, deterministic=False)
     )
