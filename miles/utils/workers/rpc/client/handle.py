@@ -175,18 +175,17 @@ class RpcWorkerHandle(BaseWorkerHandle):
         return await call.run()
 
     async def _prepare_call(self, *, spec: RpcMethodSpec, kwargs: dict[str, Any]) -> RpcCall:
-        call = RpcCall(
+        if self._boot_uuid_pin.needs_handshake():
+            await self.wait_ready(timeout=self._ready_timeout_seconds)
+
+        return RpcCall(
             spec=spec,
             kwargs=kwargs,
             worker_cls_name=self._worker_cls_name,
             transport=self._transport,
             call_timeout_seconds=self._call_timeout_seconds,
+            retry_ambiguous_submit=self._boot_uuid_pin.expected is not None,
         )
-
-        if self._boot_uuid_pin.needs_handshake():
-            await self.wait_ready(timeout=self._ready_timeout_seconds)
-
-        return call
 
 
 def _traverse_error_chain(error: BaseException) -> Iterator[BaseException]:
