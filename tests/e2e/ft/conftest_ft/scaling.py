@@ -153,6 +153,7 @@ def _build_train_args(*, mode: FTTestMode, dump_dir: Path) -> str:
         + get_ft_args(mode, api_server_args=API_SERVER_ARGS)
         + "--mini-ft-controller-enable "
         + "--trainer-heartbeat-checker-first-wait 0 "
+        + "--mooncake-replica-num 2 "
         + f"--init-expected-num-cells {mode.rollout_num_engines} "
         + f"--trainer-init-expected-num-cells {mode.num_cells} "
         + get_train_env_vars_arg(mode, deterministic=False)
