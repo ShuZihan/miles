@@ -34,6 +34,7 @@ from miles.utils.test_utils.fault_injector.models import FaultHookRecord
 from miles.utils.workers.env_vars import CELL_INDEX_ENV_VAR
 from miles.utils.workers.rpc.common.metadata import rpc
 from miles.utils.workers.rpc.common.wire_types import Pickled
+from miles.utils.workers.serving.utils import override_env
 from miles.utils.workers.serving.worker_identity import read_worker_in_pod_index
 
 logger = logging.getLogger(__name__)
@@ -172,10 +173,11 @@ class TrainRayActor(NodeProbeMixin):
             backend = f"cpu:{cpu_backend},cuda:{args.backend.distributed_backend}"
             logger.info(f"FSDP CPU offload enabled, using hybrid backend: {backend}")
 
-        dist.init_process_group(
-            backend=backend,
-            timeout=timedelta(minutes=args.backend.distributed_timeout_minutes),
-        )
+        with override_env({"TORCH_NCCL_DUMP_ON_TIMEOUT": "0"} if args.indep_dp else {}):
+            dist.init_process_group(
+                backend=backend,
+                timeout=timedelta(minutes=args.backend.distributed_timeout_minutes),
+            )
         init_gloo_group()
 
         with args.backend.mutable():
