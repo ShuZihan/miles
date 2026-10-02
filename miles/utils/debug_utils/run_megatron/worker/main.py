@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -25,11 +26,12 @@ from sglang.srt.debug_utils.dumper import dumper
 from sglang.srt.debug_utils.source_patcher import apply_patches_from_config
 
 from miles.backends.megatron_utils.checkpoint import load_checkpoint
+from miles.backends.megatron_utils.checkpoint_request import MegatronCheckpointLoad
 from miles.backends.megatron_utils.initialize import init
 from miles.backends.megatron_utils.model_provider import get_model_provider_func
 from miles.backends.training_utils.parallel import get_parallel_state
 from miles.utils.args.runtime import TrainerConfig
-from miles.utils.args.trainer_utils import compute_trainer_config
+from miles.utils.args.trainer_utils import compute_trainer_checkpoint_load, compute_trainer_config
 from miles.utils.arguments import parse_args
 from miles.utils.debug_utils.run_megatron.worker.batch import loss_func, prepare_batch
 from miles.utils.debug_utils.run_megatron.worker.output import compute_and_save_output_info
@@ -44,19 +46,28 @@ from miles_plugins.models.glm5.arguments import add_dsa_arguments
 from miles.utils.workers.serving.utils import override_argv
 
 
+@dataclass(frozen=True)
+class _WorkerInputs:
+    trainer: TrainerConfig
+    script: WorkerScriptArgs
+    checkpoint_load: MegatronCheckpointLoad
+
+
 def main() -> None:
-    trainer_args, script = _parse_args()
-    _initialize_megatron(args=trainer_args)
+    inputs = _parse_args()
+    trainer_args, script = inputs.trainer, inputs.script
+    with inputs.checkpoint_load.apply(trainer_args.backend):
+        _initialize_megatron(args=trainer_args)
 
-    rank: int = dist.get_rank()
-    if rank == 0:
-        _print_config(trainer_args, script)
+        rank: int = dist.get_rank()
+        if rank == 0:
+            _print_config(trainer_args, script)
 
-    if script.source_patcher_config:
-        _apply_source_patches(script.source_patcher_config)
+        if script.source_patcher_config:
+            _apply_source_patches(script.source_patcher_config)
 
-    setup_replay_before_model(script)
-    model: list[Any] = _build_and_load_model(trainer_args, script)
+        setup_replay_before_model(script)
+        model: list[Any] = _build_and_load_model(trainer_args, script)
 
     for m in model:
         dumper.register_non_intrusive_dumper(m)
@@ -113,7 +124,7 @@ def main() -> None:
     dist.destroy_process_group()
 
 
-def _parse_args() -> tuple[TrainerConfig, WorkerScriptArgs]:
+def _parse_args() -> _WorkerInputs:
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     WORKER_SCRIPT_ARGS_BRIDGE.register_on_parser(parser)
     worker_args, model_argv = parser.parse_known_args()
@@ -162,7 +173,9 @@ def _parse_args() -> tuple[TrainerConfig, WorkerScriptArgs]:
     trainer_args = compute_trainer_config(args, trainers[0])
     assert trainer_args.backend.world_size == world_size
     assert not trainer_args.offload_train
-    return trainer_args, script_args
+    checkpoint_load = compute_trainer_checkpoint_load(args, trainers[0])
+    assert checkpoint_load is not None
+    return _WorkerInputs(trainer=trainer_args, script=script_args, checkpoint_load=checkpoint_load)
 
 
 def _initialize_megatron(args: TrainerConfig) -> None:

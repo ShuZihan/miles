@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 
+from miles.backends.megatron_utils.checkpoint_request import MegatronCheckpointLoad
 from miles.ray.train.cell_monitor import compute_cell_status
 from miles.ray.train.cell_state import (
     CellState,
@@ -31,6 +32,7 @@ class TrainerCell:
         self,
         *,
         args,
+        checkpoint_load: MegatronCheckpointLoad | None = None,
         role: str,
         with_ref: bool,
         with_opd_teacher: bool = False,
@@ -41,6 +43,7 @@ class TrainerCell:
         provider: BaseWorkerProvider,
     ) -> None:
         self.args = args
+        self._checkpoint_load = checkpoint_load
         self.cell_id = cell_id
         self.cell_index = cell_index
         self.workers_hash = workers_hash
@@ -82,6 +85,7 @@ class TrainerCell:
         results = await self.execute(
             "init",
             args=self.args,
+            checkpoint_load=self._checkpoint_load,
             role=self.role,
             with_ref=self.with_ref,
             with_opd_teacher=self.with_opd_teacher,
@@ -94,8 +98,9 @@ class TrainerCell:
         await asyncio.sleep(0)
         return results
 
-    async def load_state(self) -> list:
-        return await self.execute("load_state")
+    async def load_state(self, checkpoint_load: MegatronCheckpointLoad | None) -> list:
+        self._checkpoint_load = checkpoint_load
+        return await self.execute("load_state", checkpoint_load=checkpoint_load)
 
     async def train(
         self,

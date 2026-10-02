@@ -385,7 +385,7 @@ def compute_trainer_args(args: Namespace, trainer: MegatronTrainerConfig) -> Nam
         ans.save_hf = compute_trainer_checkpoint_dir(base_dir=ans.save_hf, trainer_id=trainer.trainer_id)
 
     # TODO: a --use-critic critic keeps the actor's requested_load, so a hot restart reads the actor's checkpoint.
-    if trainer.model_id is not None:
+    if trainer.model_id is not None and ans.train_backend != "megatron":
         resolve_args_checkpoint_load(ans)
 
     ans.trainer_init_expected_num_cells = _resolve_trainer_init_expected_num_cells(ans, base=args, trainer=trainer)
@@ -422,20 +422,21 @@ def compute_trainer_checkpoint_dir(*, base_dir: str | None, trainer_id: str) -> 
     return str(Path(base_dir) / TRAINER_CHECKPOINT_DIRNAME / trainer_id)
 
 
-def resolve_args_checkpoint_load(args: Namespace) -> None:
+def resolve_args_checkpoint_load(args: Namespace) -> bool:
     # TODO: refactor
     args.requested_load = args.load
+    resume_from_ckpt = has_megatron_checkpoint(args.load)
 
     # TODO: During loading, we need to set the start_rollout_id here.
     if args.megatron_to_hf_mode == "bridge":
         # Fresh runs pass a not-yet-created `--load` dir; fall back to the reference
         # weights (loaded via the HF bridge) instead of asserting in load_checkpoint.
         # Mirrors the non-bridge branch below.
-        if not has_megatron_checkpoint(args.load):
+        if not resume_from_ckpt:
             args.load = args.ref_load or args.hf_checkpoint
             args.start_rollout_id = 0
     else:
-        if not has_megatron_checkpoint(args.load):
+        if not resume_from_ckpt:
             args.no_load_optim = True
             args.no_load_rng = True
             args.finetune = True
@@ -443,6 +444,8 @@ def resolve_args_checkpoint_load(args: Namespace) -> None:
             if args.ref_ckpt_step is not None:
                 args.ckpt_step = args.ref_ckpt_step
             args.start_rollout_id = 0
+
+    return resume_from_ckpt
 
 
 def has_megatron_checkpoint(load_dir: str | None) -> bool:

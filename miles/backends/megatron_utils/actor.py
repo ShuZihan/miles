@@ -11,6 +11,7 @@ import torch.distributed as dist
 from megatron.training.async_utils import maybe_finalize_async_save
 from torch_memory_saver import torch_memory_saver
 
+from miles.backends.megatron_utils.checkpoint_request import MegatronCheckpointLoad
 from miles.backends.megatron_utils.hf_export import save_hf_model
 from miles.backends.megatron_utils.lora.utils import is_lora_enabled, lora_rollout_enabled
 from miles.backends.megatron_utils.rematerialize_utils import build_main_cast_context
@@ -118,6 +119,30 @@ class MegatronTrainRayActor(TrainRayActor):
     @with_logs
     @with_defer(lambda: Timer().start("train_wait"))
     def init(
+        self,
+        args: Pickled,
+        role: str,
+        *,
+        checkpoint_load: MegatronCheckpointLoad | None = None,
+        with_ref: bool = False,
+        with_opd_teacher: bool = False,
+        recv_ckpt_src_rank: int | None = None,
+        indep_dp_info: IndepDPInfo,
+        indep_dp_store_addr: str | None,
+    ) -> int | None:
+        assert checkpoint_load is not None, "Megatron initialization requires checkpoint load inputs"
+        with checkpoint_load.apply(args.backend):
+            return self._init(
+                args=args,
+                role=role,
+                with_ref=with_ref,
+                with_opd_teacher=with_opd_teacher,
+                recv_ckpt_src_rank=recv_ckpt_src_rank,
+                indep_dp_info=indep_dp_info,
+                indep_dp_store_addr=indep_dp_store_addr,
+            )
+
+    def _init(
         self,
         args: Pickled,
         role: str,
@@ -338,8 +363,16 @@ class MegatronTrainRayActor(TrainRayActor):
                 if isinstance(module, TransformerEngineBaseModule):
                     module._fp8_workspaces.clear()
 
+    def finalize_pending_checkpoint(self) -> None:
+        self._finalize_pending_async_save()
+
     @with_logs
-    def load_state(self) -> int:
+    def load_state(self, checkpoint_load: MegatronCheckpointLoad | None) -> int:
+        assert checkpoint_load is not None, "Megatron reload requires checkpoint load inputs"
+        with checkpoint_load.apply(self.args.backend):
+            return self._reload_state(resume_from_ckpt=checkpoint_load.resume_from_ckpt)
+
+    def _reload_state(self, *, resume_from_ckpt: bool) -> int:
         assert self.is_initialized()
 
         # reloading does not support things like these
@@ -359,11 +392,11 @@ class MegatronTrainRayActor(TrainRayActor):
         assert not (
             self.with_ref and self.args.ref_update_interval is not None
         ), "--ref-update-interval keeps the reference in memory only, and no checkpoint holds it"
-        assert (requested_load := self.args.requested_load) is not None, "a hot restart needs --load"
+        assert self.args.requested_load is not None, "a hot restart needs --load"
+        requested_load = self.args.backend.load
 
         self._finalize_pending_async_save()
 
-        resume_from_ckpt = read_checkpoint_tracker_iteration(requested_load) is not None
         if not resume_from_ckpt:
             assert not self.args.backend.fp16
             assert not self.args.backend.use_precision_aware_optimizer
@@ -384,7 +417,7 @@ class MegatronTrainRayActor(TrainRayActor):
             )
         else:
             logger.info(
-                f"load_state found no checkpoint under --load {requested_load!r}; loading the state the run "
+                f"load_state found no checkpoint under --load {self.args.requested_load!r}; loading the state the run "
                 f"started from"
             )
             overrider_for_loading = {}

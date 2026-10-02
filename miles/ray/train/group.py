@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 from uuid import uuid4
 
+from miles.backends.megatron_utils.checkpoint_request import MegatronCheckpointLoad
 from miles.backends.megatron_utils.megatron_config import CRITIC_ROLE
 from miles.backends.training_utils.types import TrainStepOutcome, TrainStepOutput
 from miles.ray.rollout.inference_controller import UpdatableEngines
@@ -84,6 +85,7 @@ class TrainerController:
         self._provider = cell_provider
         self._cell_operations = cell_operations
         self._watcher_disposer: StopWatchFn | None = None
+        self._checkpoint_load: MegatronCheckpointLoad | None = None
 
         self._indep_dp_quorum_id = 0
         self._indep_dp_store: Any | None = None
@@ -154,6 +156,7 @@ class TrainerController:
     def _create_cell(self, cell_id: str, *, cell_index: int, workers_hash: str) -> TrainerCell:
         cell = TrainerCell(
             args=self.args,
+            checkpoint_load=self._checkpoint_load,
             role=self._role,
             with_ref=self._with_ref,
             with_opd_teacher=self._with_opd_teacher,
@@ -367,6 +370,7 @@ class TrainerController:
         model, optimzier, local ckpt, etc.
         """
         args = self.args
+        self._checkpoint_load = request.checkpoint_load
         args.num_rollout = request.num_rollout
         args.wandb_run_id = request.wandb_run_id
         args.mlflow_run_id = request.mlflow_run_id
@@ -414,17 +418,25 @@ class TrainerController:
     async def is_initialized(self) -> bool:
         return self._init_once.is_initialized()
 
-    async def load_state(self) -> list[Any]:
+    async def finalize_pending_checkpoint(self) -> None:
+        await self._wait_for_reload_cells()
+        await gather_and_raise_first([cell.execute("finalize_pending_checkpoint") for cell in self._cells])
+
+    async def load_state(self, request: TrainerControllerInitRequest) -> list[Any]:
+        await self._wait_for_reload_cells()
+
+        self._checkpoint_load = request.checkpoint_load
+        cell_results = await gather_and_raise_first([cell.load_state(request.checkpoint_load) for cell in self._cells])
+        self._debug_trainer_load_state_timestamp = time.time()
+        return [item for sublist in cell_results for item in sublist]
+
+    async def _wait_for_reload_cells(self) -> None:
         assert self._init_once.is_initialized()
 
         await self._wait_expected_num_cells(timeout=_CELLS_READY_TIMEOUT_SECONDS)
 
         not_alive = [cell.cell_id for cell in self._cells if not cell.is_alive]
         assert not not_alive, f"a reload does not support cells that are not alive: {not_alive}"
-
-        cell_results = await gather_and_raise_first([cell.load_state() for cell in self._cells])
-        self._debug_trainer_load_state_timestamp = time.time()
-        return [item for sublist in cell_results for item in sublist]
 
     async def save_model(self, rollout_id: int, force_sync: bool = False) -> None:
         """Save actor model. Only cell 0 saves to avoid file write conflicts."""

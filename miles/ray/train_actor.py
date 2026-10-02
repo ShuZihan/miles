@@ -11,6 +11,7 @@ import torch
 import torch.distributed as dist
 
 import miles.utils.eval_config
+from miles.backends.megatron_utils.checkpoint_request import MegatronCheckpointLoad
 from miles.backends.training_utils.types import TrainStepOutput
 from miles.ray.rollout.inference_controller import UpdatableEngines
 from miles.utils import object_store
@@ -138,6 +139,7 @@ class TrainRayActor(NodeProbeMixin):
         args: Pickled,
         role: str,
         *,
+        checkpoint_load: MegatronCheckpointLoad | None = None,
         with_ref: bool = False,
         with_opd_teacher: bool = False,
         recv_ckpt_src_rank: int | None = None,
@@ -215,7 +217,10 @@ class TrainRayActor(NodeProbeMixin):
     def is_initialized(self) -> bool:
         return self._init_once.is_initialized()
 
-    def load_state(self) -> int:
+    def finalize_pending_checkpoint(self) -> None:
+        raise NotImplementedError(f"{type(self).__name__} cannot prepare a checkpoint reload")
+
+    def load_state(self, checkpoint_load: MegatronCheckpointLoad | None) -> int:
         raise NotImplementedError(f"{type(self).__name__} cannot reload its state without restarting")
 
     @rpc(concurrency_group="heartbeat_status")

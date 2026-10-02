@@ -235,13 +235,11 @@ async def create_training_models(
     handles = create_trainer_handles(args, trainer_configs=trainer_configs, capability=capability)
     resumed = await take_over_trainers(args, handles=handles)
 
-    request = TrainerControllerInitRequest.from_args(args)
-
     [actor_config] = [config for config in trainer_configs if config.role == ACTOR_ROLE]
     actor_info = await create_training_model(
         handle=handles[actor_config.trainer_id],
         trainer_id=actor_config.trainer_id,
-        request=request,
+        request=TrainerControllerInitRequest.from_args(args, trainer=actor_config),
         requested_start_rollout_id=args.start_rollout_id,
         resumed=resumed,
     )
@@ -253,7 +251,7 @@ async def create_training_models(
         critic_info = await create_training_model(
             handle=handles[critic_config.trainer_id],
             trainer_id=critic_config.trainer_id,
-            request=request,
+            request=TrainerControllerInitRequest.from_args(args, trainer=critic_config),
             requested_start_rollout_id=args.start_rollout_id,
             resumed=resumed,
         )
@@ -270,7 +268,7 @@ async def create_training_models(
 
     await rollout_executor.set_train_parallel_config(await actor_info.handle.get_train_parallel_config())
     if args.start_rollout_id > 0:
-        await rollout_executor.load(args.start_rollout_id - 1)
+        await rollout_executor.load(args.start_rollout_id - 1, load=args.load)
 
     return actor_info.handle, critic_info.handle if critic_info is not None else None
 

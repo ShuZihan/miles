@@ -362,13 +362,13 @@ class RolloutExecutor:
             self._output_snapshotter.save(dir_temp / _EXECUTOR_DIRNAME)
 
     # async but never awaits, for the same reason as save
-    async def load(self, rollout_id: int) -> None:
-        if self.args.load is None:
+    async def load(self, rollout_id: int, *, load: str | None) -> None:
+        if load is None:
             logger.warning("no --load: the rollout side starts fresh")
             return
         assert rollout_id >= 0, f"rollout {rollout_id} is not a trained step"
 
-        directory = compute_rollout_checkpoint_dir(self.args.load, rollout_id=rollout_id)
+        directory = compute_rollout_checkpoint_dir(load, rollout_id=rollout_id)
         assert directory.is_dir(), (
             f"the trainer restored rollout {rollout_id}, but {directory} does not exist; a run saved before the "
             f"rollout-side state moved into one directory per rollout cannot resume that state"

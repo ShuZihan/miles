@@ -66,6 +66,11 @@ async def wait_trainers_idle(handles: dict[str, BaseWorkerHandle]) -> bool:
             logger.info(f"Waiting until trainer {trainer_id!r} finished the call the previous script left running")
             await handle.wait_idle(timeout=TAKE_OVER_GATE_TIMEOUT_SECONDS)
 
+        await asyncio.wait_for(
+            asyncio.gather(*[handle.finalize_pending_checkpoint() for handle in handles.values()]),
+            timeout=_TRAINER_RELOAD_TIMEOUT_SECONDS,
+        )
+
     return resumed
 
 
@@ -75,7 +80,7 @@ async def trainer_init_or_load_state(
     if not resumed:
         return await trainer.init(request)
 
-    start_rollout_ids = await asyncio.wait_for(trainer.load_state(), timeout=_TRAINER_RELOAD_TIMEOUT_SECONDS)
+    start_rollout_ids = await asyncio.wait_for(trainer.load_state(request), timeout=_TRAINER_RELOAD_TIMEOUT_SECONDS)
     logger.info(f"Resumed the already-initialized trainer {trainer_id!r} at rollout ids {start_rollout_ids}")
     return start_rollout_ids
 
