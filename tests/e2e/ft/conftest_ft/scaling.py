@@ -84,14 +84,7 @@ def run_scaling_scenario(
     prepare(mode, config=config)
     assert_fresh_dump_dir(dump_dir)
 
-    train_args = (
-        get_common_train_args(mode, dump_dir=str(dump_dir), num_steps=SCALING_NUM_ROLLOUTS, enable_dumper=False)
-        + get_ft_args(mode, api_server_args=API_SERVER_ARGS)
-        + "--mini-ft-controller-enable "
-        + f"--init-expected-num-cells {mode.rollout_num_engines} "
-        + f"--trainer-init-expected-num-cells {mode.num_cells} "
-        + get_train_env_vars_arg(mode, deterministic=False)
-    )
+    train_args = _build_train_args(mode=mode, dump_dir=dump_dir)
 
     evidence_dir = evidence_directory(dump_dir)
     event_log = EventLog(evidence_dir / "events.jsonl")
@@ -152,6 +145,18 @@ def run_scaling_scenario(
         subject=counted,
     )
     print(f"Scaling test PASSED ({test_name}, rollouts={SCALING_NUM_ROLLOUTS}, schedule={SCALING_SCHEDULE})")
+
+
+def _build_train_args(*, mode: FTTestMode, dump_dir: Path) -> str:
+    return (
+        get_common_train_args(mode, dump_dir=str(dump_dir), num_steps=SCALING_NUM_ROLLOUTS, enable_dumper=False)
+        + get_ft_args(mode, api_server_args=API_SERVER_ARGS)
+        + "--mini-ft-controller-enable "
+        + "--trainer-heartbeat-checker-first-wait 0 "
+        + f"--init-expected-num-cells {mode.rollout_num_engines} "
+        + f"--trainer-init-expected-num-cells {mode.num_cells} "
+        + get_train_env_vars_arg(mode, deterministic=False)
+    )
 
 
 async def _relaunch_at_size(
