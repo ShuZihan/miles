@@ -234,9 +234,9 @@ class InferenceController:
             },
         )
 
-    @releases_lock
+    @lock_exempt
     async def abort_update_weights(self) -> None:
-        pass
+        self.context_lock.release_if_detached()
 
     @releases_lock
     async def end_update_weights(

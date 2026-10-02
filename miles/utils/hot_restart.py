@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from argparse import Namespace
+from collections.abc import Sequence
 
 from miles.ray.train.init_request import TrainerControllerInitRequest
 from miles.utils.init_once import InitState
@@ -88,7 +89,9 @@ async def trainer_init_or_load_state(
 # ============================ inference take-over =============================
 
 
-async def init_or_reset_inference_controller(inference_controller: BaseWorkerHandle, *, args: Namespace) -> None:
+async def init_or_reset_inference_controller(
+    inference_controller: BaseWorkerHandle, *, args: Namespace, trainers: Sequence[BaseWorkerHandle]
+) -> None:
     if not await inference_controller.is_initialized():
         await inference_controller.init()
         return
@@ -100,6 +103,9 @@ async def init_or_reset_inference_controller(inference_controller: BaseWorkerHan
     logger.info("The inference controller outlived a previous orchestration script; taking it over as it is")
 
     await inference_controller.wait_idle(timeout=_INFERENCE_IDLE_TIMEOUT_SECONDS)
+
+    await asyncio.gather(*[trainer.wait_idle(timeout=TAKE_OVER_GATE_TIMEOUT_SECONDS) for trainer in trainers])
+    await asyncio.wait_for(inference_controller.abort_update_weights(), timeout=TAKE_OVER_GATE_TIMEOUT_SECONDS)
 
     await inference_controller.wait_expected_num_cells(timeout=TAKE_OVER_GATE_TIMEOUT_SECONDS)
 

@@ -453,7 +453,10 @@ async def create_rollout_components(args, *, capability: BackendCapability) -> R
     await wait_until_worker_not_initialized(rollout_executor)
 
     inference_controller = create_inference_controller_handle(capability=capability)
-    await init_or_reset_inference_controller(inference_controller, args=args)
+    trainer_handles = create_trainer_handles(
+        args, trainer_configs=compute_trainer_configs(args), capability=capability
+    )
+    await init_or_reset_inference_controller(inference_controller, args=args, trainers=list(trainer_handles.values()))
 
     await rollout_executor.init()
 
