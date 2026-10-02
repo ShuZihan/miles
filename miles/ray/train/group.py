@@ -149,7 +149,7 @@ class TrainerController:
 
     async def _remove_cell(self, cell_id: str) -> None:
         cell = self._cells_by_id.pop(cell_id)
-        cell.health_checker.stop()
+        cell.detach()
 
     def _create_cell(self, cell_id: str, *, cell_index: int, workers_hash: str) -> TrainerCell:
         cell = TrainerCell(
