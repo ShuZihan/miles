@@ -5,6 +5,7 @@ from pathlib import Path
 
 from tests.e2e.deploy.conftest_deploy.common.example_args import with_replaced_value
 from tests.e2e.ft.conftest_ft.execution import (
+    ROLLOUT_HEALTH_CHECK_INTERVAL_SECONDS,
     get_common_train_args,
     get_ft_args,
     get_train_env_vars_arg,
@@ -158,6 +159,7 @@ def _build_train_args(*, mode: FTTestMode, dump_dir: Path) -> str:
         + get_ft_args(mode, api_server_args=API_SERVER_ARGS)
         + "--mini-ft-controller-enable "
         + "--trainer-heartbeat-checker-first-wait 0 "
+        + f"--rollout-health-check-interval {ROLLOUT_HEALTH_CHECK_INTERVAL_SECONDS} "
         + "--mooncake-replica-num 2 "
         + f"--init-expected-num-cells {mode.rollout_num_engines} "
         + f"--trainer-init-expected-num-cells {mode.num_cells if 'train' in mode.ft_components else 1} "
