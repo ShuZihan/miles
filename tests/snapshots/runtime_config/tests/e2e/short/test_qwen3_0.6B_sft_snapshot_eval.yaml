@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 4
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 4
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: false
+          /args/backend/load: /root/models/Qwen3-0.6B
+          /args/backend/no_load_optim: null
+          /args/backend/no_load_rng: null
           /load: /root/models/Qwen3-0.6B
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -36,7 +41,6 @@ processes:
           /args/colocate: false
           /args/compute_advantages_and_returns: false
           /args/config_snapshot_name: tests/e2e/short/test_qwen3_0.6B_sft_snapshot_eval/run-0000
-          /args/critic_load: /root/models/Qwen3-0.6B
           /args/debug_train_only: true
           /args/enable_sample_ownership_checker: false
           /args/eps_clip_high: 0.2
@@ -77,10 +81,10 @@ processes:
                 model_path: /root/models/Qwen3-0.6B
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: false
+          /args/start_rollout_id: null
         - &id005
           /args/eval_interval: 2
           /args/global_batch_size: 16
-          /args/load: /root/models/Qwen3-0.6B
           /args/log_probs_max_tokens_per_gpu: 9216
           /args/max_tokens_per_gpu: 9216
           /args/num_layers: 28
@@ -110,7 +114,7 @@ processes:
           /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 16
           /args/raw_megatron/base_args/hidden_size: 1024
-          /args/raw_megatron/base_args/load: /root/models/Qwen3-0.6B
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/no_load_optim: null
           /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 16
@@ -177,7 +181,8 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
-    remove: *id003
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng,
+      /args/init_expected_num_cells/default]
     set:
       <<: *id004
       /args/backend/calculate_per_token_loss: true
@@ -187,12 +192,8 @@ shared_overrides:
       /args/backend/eval_global_batch_size: 16
       /args/backend/eval_interval: 2
       /args/backend/ffn_hidden_size: 3072
-      /args/backend/finetune: false
       /args/backend/global_batch_size: 16
       /args/backend/hidden_size: 1024
-      /args/backend/load: /root/models/Qwen3-0.6B
-      /args/backend/no_load_optim: null
-      /args/backend/no_load_rng: null
       /args/backend/num_attention_heads: 16
       /args/backend/num_layers: 28
       /args/backend/recompute_granularity: null
@@ -203,6 +204,7 @@ shared_overrides:
       /args/backend/wandb_project: miles-test_qwen3_0.6B_sft_snapshot_eval
       /args/backend/world_size: 1
       /args/balance_data: false
+      /args/critic_load: null
       /args/input_key: messages
       /args/rollout_temperature: 1.0
       /args/use_kl_loss: false

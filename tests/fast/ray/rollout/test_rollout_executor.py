@@ -371,7 +371,7 @@ class TestOutputSnapshotReplay:
             resumed_fn = FailingRolloutFn(RolloutFnConstructorInput(args=args, data_source=_FakeDataSource(tmp_path)))
             resumed = _make_executor(tmp_path, _CountingRolloutFn())
             self._configure_async_executor(resumed, args=args, rollout_fn=resumed_fn)
-            await resumed.load(0)
+            await resumed.load(0, load=str(tmp_path))
             await resumed.get(rollout_id=1)
         finally:
             set_event_logger(None)
@@ -408,7 +408,7 @@ class TestOutputSnapshotReplay:
         executor._output_snapshotter.capture(trainer_model_id=None, rollout_id=3, data=[Sample(index=7)], metadata={})
         await executor.save(2)
         restored = _make_executor(tmp_path, _CountingRolloutFn())
-        await restored.load(2)
+        await restored.load(2, load=str(tmp_path))
 
         caller_loop = asyncio.get_running_loop()
 
@@ -422,7 +422,7 @@ class TestOutputSnapshotReplay:
         assert (await restored.get(rollout_id=3)).sample_indices == [7]
         await restored.save(2)
         resumed_again = _make_executor(tmp_path, _CountingRolloutFn())
-        await resumed_again.load(2)
+        await resumed_again.load(2, load=str(tmp_path))
         assert (await resumed_again.get(rollout_id=3)).sample_indices == [7]
 
     async def test_a_generated_batch_is_captured_before_a_concurrent_save_runs(
@@ -585,14 +585,14 @@ class TestOneDirectoryPerRolloutCheckpoint:
         executor = _make_executor(tmp_path, _CountingRolloutFn())
 
         with pytest.raises(AssertionError, match="cannot resume that state"):
-            await executor.load(5)
+            await executor.load(5, load=str(tmp_path))
 
     async def test_a_step_that_was_never_trained_is_refused(self, tmp_path: Path) -> None:
         """A run whose trainer starts from scratch has no rollout state, and must not be asked for any."""
         executor = _make_executor(tmp_path, _CountingRolloutFn())
 
         with pytest.raises(AssertionError, match="is not a trained step"):
-            await executor.load(-1)
+            await executor.load(-1, load=str(tmp_path))
 
         assert executor.data_source.loaded == []
 
@@ -603,7 +603,7 @@ class TestOneDirectoryPerRolloutCheckpoint:
         (compute_rollout_checkpoint_dir(tmp_path, rollout_id=5) / "executor" / "state.pt").unlink()
 
         with pytest.raises(AssertionError, match="executor/state.pt"):
-            await executor.load(5)
+            await executor.load(5, load=str(tmp_path))
 
     async def test_a_custom_data_source_does_not_imply_the_builtin_state_file(self, tmp_path: Path) -> None:
         """A custom source keeps its own checkpoint contract instead of writing the built-in cursor file."""
@@ -611,7 +611,7 @@ class TestOneDirectoryPerRolloutCheckpoint:
         executor.data_source = _CustomDataSource()
 
         await executor.save(5)
-        await executor.load(5)
+        await executor.load(5, load=str(tmp_path))
 
         assert not (compute_rollout_checkpoint_dir(tmp_path, rollout_id=5) / "data_source").exists()
 

@@ -28,6 +28,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import torch
+from tests.fast.fixtures.args_fixtures import ConfigNamespace
 
 
 def _ensure_module(dotted: str) -> ModuleType:
@@ -106,9 +107,16 @@ from miles.utils.debug_utils.run_megatron.worker.main import (  # noqa: E402
 _MODULE = "miles.utils.debug_utils.run_megatron.worker.main"
 
 
-def _parsed_standalone_args(*, trainers: list[SimpleNamespace], **overrides: Any) -> SimpleNamespace:
+def _parsed_standalone_args(*, trainers: list[SimpleNamespace], **overrides: Any) -> ConfigNamespace:
     defaults = {
         "train_backend": "megatron",
+        "megatron_to_hf_mode": "bridge",
+        "load": None,
+        "ref_load": None,
+        "no_load_optim": None,
+        "no_load_rng": None,
+        "finetune": None,
+        "ckpt_step": None,
         "debug_train_only": True,
         "debug_rollout_only": False,
         "offload_train": False,
@@ -118,7 +126,10 @@ def _parsed_standalone_args(*, trainers: list[SimpleNamespace], **overrides: Any
         "actor_num_nodes": 1,
         "actor_num_gpus_per_node": 1,
     }
-    return SimpleNamespace(**(defaults | overrides), raw_megatron=SimpleNamespace(trainers=trainers))
+    for trainer in trainers:
+        trainer.overrides = {}
+        trainer.model_id = None
+    return ConfigNamespace(**(defaults | overrides), raw_megatron=SimpleNamespace(base_args={}, trainers=trainers))
 
 
 def _trainer_config(*, world_size: int) -> SimpleNamespace:
@@ -163,9 +174,12 @@ class TestParseArgs:
         ), patch(f"{_MODULE}.parse_args", side_effect=parse_shared), patch(
             f"{_MODULE}.compute_trainer_config", return_value=trainer_config
         ) as compute:
-            args, script_args = _parse_args()
+            inputs = _parse_args()
+            args, script_args = inputs.trainer, inputs.script
             assert sys.argv is argv
 
+        assert inputs.checkpoint_load.load == "/model"
+        assert not inputs.checkpoint_load.resume_from_ckpt
         assert args is trainer_config
         compute.assert_called_once_with(parsed, critic)
         assert script_args.ref_load == Path("/checkpoint")

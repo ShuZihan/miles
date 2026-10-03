@@ -26,7 +26,7 @@ from miles.utils.hot_restart import (
     wait_trainers_idle,
     wait_until_worker_not_initialized,
 )
-from miles.utils.init_once import InitState
+from miles.utils.init_once import InitOnce, InitState
 from miles.utils.workers.rpc.client import handle as rpc_handle_module
 from miles.utils.workers.rpc.client.handle import RpcWorkerHandle
 from miles.utils.workers.rpc.client.misc import ServerRestartedError
@@ -72,8 +72,12 @@ class _FakeTrainer:
         self.init_requests.append(request)
         return [7]
 
-    async def load_state(self) -> list[Any]:
+    async def finalize_pending_checkpoint(self) -> None:
+        self._record("finalize_pending_checkpoint")
+
+    async def load_state(self, request: TrainerControllerInitRequest) -> list[Any]:
         self._record("load_state")
+        self.init_requests.append(request)
         await asyncio.sleep(self.load_seconds)
         return [3]
 
@@ -125,6 +129,9 @@ class _FakeInferenceController:
         self.fleet_timeouts.append(timeout)
         if self.fleet_incomplete:
             raise TimeoutError("the fleet is short of engines")
+
+    async def abort_update_weights(self) -> None:
+        self.calls.append("abort_update_weights")
 
     async def abort_all(self) -> None:
         self.calls.append("abort_all")
@@ -307,7 +314,7 @@ class TestTheTrainersAreWaitedIdle:
 
         assert await wait_trainers_idle({_TRAINER_ID: trainer}) is True
 
-        assert trainer.calls == ["is_initialized", "wait_idle"]
+        assert trainer.calls == ["is_initialized", "wait_idle", "finalize_pending_checkpoint"]
 
     async def test_the_whole_fleet_is_asked_before_any_of_it_is_drained(self):
         """A fleet that disagrees must stop the run before it spends the budget draining half of it."""
@@ -322,6 +329,8 @@ class TestTheTrainersAreWaitedIdle:
             f"{_OTHER_TRAINER_ID}.is_initialized",
             f"{_TRAINER_ID}.wait_idle",
             f"{_OTHER_TRAINER_ID}.wait_idle",
+            f"{_TRAINER_ID}.finalize_pending_checkpoint",
+            f"{_OTHER_TRAINER_ID}.finalize_pending_checkpoint",
         ]
 
     async def test_a_disagreeing_fleet_is_refused_before_anything_is_drained(self):
@@ -379,6 +388,7 @@ class TestTheTrainerStateIsRolledBack:
         assert await trainer_init_or_load_state(warm, _INIT_REQUEST, trainer_id=_TRAINER_ID, resumed=True) == [3]
         assert cold.calls == ["init"] and warm.calls == ["load_state"]
         assert cold.init_requests == [_INIT_REQUEST]
+        assert warm.init_requests == [_INIT_REQUEST]
 
     async def test_a_reload_that_never_returns_fails_loud(self, short_reload_budget: None):
         """A trainer wedged inside load_state would otherwise leave the run waiting on it forever."""
@@ -426,7 +436,7 @@ class TestTheInferenceSideIsInitedOrReset:
         """A cold start must be untouched by the take-over protocol it shares this entry point with."""
         controller = _FakeInferenceController(initialized=False)
 
-        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert controller.calls == ["is_initialized", "init"]
 
@@ -434,11 +444,12 @@ class TestTheInferenceSideIsInitedOrReset:
         """A cell away during the abort would rejoin still generating, so the fleet is completed first."""
         controller = _FakeInferenceController(initialized=True)
 
-        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert controller.calls == [
             "is_initialized",
             "wait_idle",
+            "abort_update_weights",
             "wait_expected_num_cells",
             "abort_all",
         ]
@@ -448,7 +459,7 @@ class TestTheInferenceSideIsInitedOrReset:
         controller = _FakeInferenceController(initialized=True)
 
         with pytest.raises(AssertionError, match="does not support disk-delta weight transfer"):
-            await init_or_reset_inference_controller(controller, args=_DISK_DELTA_ARGS)
+            await init_or_reset_inference_controller(controller, args=_DISK_DELTA_ARGS, trainers=[])
 
         assert controller.calls == ["is_initialized"]
 
@@ -457,7 +468,7 @@ class TestTheInferenceSideIsInitedOrReset:
         controller = _FakeInferenceController(initialized=True, busy=True)
 
         with pytest.raises(TimeoutError, match="still busy"):
-            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert "abort_all" not in controller.calls
 
@@ -465,7 +476,7 @@ class TestTheInferenceSideIsInitedOrReset:
         """A step that runs long must fail on its own timeout rather than eat what the next one gets."""
         controller = _FakeInferenceController(initialized=True)
 
-        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert controller.fleet_timeouts == [hot_restart_module.TAKE_OVER_GATE_TIMEOUT_SECONDS]
 
@@ -473,7 +484,7 @@ class TestTheInferenceSideIsInitedOrReset:
         """A cell being healed keeps a legitimate generation in flight for an hour, and that is not a gate step."""
         controller = _FakeInferenceController(initialized=True)
 
-        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert controller.idle_timeouts == [hot_restart_module._INFERENCE_IDLE_TIMEOUT_SECONDS]
         assert hot_restart_module._INFERENCE_IDLE_TIMEOUT_SECONDS > hot_restart_module.TAKE_OVER_GATE_TIMEOUT_SECONDS
@@ -484,7 +495,7 @@ class TestTheInferenceSideIsInitedOrReset:
 
         started = time.monotonic()
         with pytest.raises(asyncio.TimeoutError):
-            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert time.monotonic() - started < _STALLED_SECONDS
 
@@ -493,7 +504,7 @@ class TestTheInferenceSideIsInitedOrReset:
         controller = _FakeInferenceController(initialized=True, fleet_incomplete=True)
 
         with pytest.raises(TimeoutError, match="short of engines"):
-            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert "abort_all" not in controller.calls
 
@@ -504,7 +515,7 @@ class TestTheInferenceSideIsInitedOrReset:
         )
 
         with pytest.raises(RuntimeError, match="west-engine-0-0-0"):
-            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
 
 class TestAbortInflightRollouts:
@@ -513,7 +524,7 @@ class TestAbortInflightRollouts:
         controller = _FakeInferenceController(initialized=True, abort_error=RuntimeError("the cell refused"))
 
         with pytest.raises(RuntimeError, match="the cell refused"):
-            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
     async def test_a_fleet_that_answered_every_abort_is_logged_as_asked_rather_than_as_quiet(
         self, caplog: pytest.LogCaptureFixture
@@ -522,7 +533,7 @@ class TestAbortInflightRollouts:
         controller = _FakeInferenceController(initialized=True)
 
         with caplog.at_level(logging.INFO):
-            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert "Asked every engine of the fleet to abort" in caplog.text
 
@@ -662,6 +673,9 @@ class _WireInferenceController:
     async def wait_expected_num_cells(self, timeout: float) -> None:
         self.calls.append("wait_expected_num_cells")
 
+    async def abort_update_weights(self) -> None:
+        self.calls.append("abort_update_weights")
+
     async def abort_all(self) -> None:
         self.calls.append("abort_all")
 
@@ -678,7 +692,7 @@ class TestTheTakeOverSurfaceCrossesTheWire:
     @pytest.mark.parametrize(
         "worker_cls, methods",
         [
-            (TrainerController, {"is_initialized", "load_state"}),
+            (TrainerController, {"is_initialized", "finalize_pending_checkpoint", "load_state"}),
             (RolloutExecutor, {"get_init_state"}),
             (InferenceController, {"is_initialized", "abort_all", "wait_expected_num_cells"}),
         ],
@@ -694,9 +708,9 @@ class TestATakeOverDrivesARealInferenceControllerOverTheWire:
         worker = _WireInferenceController()
 
         async with _handle_onto_running_worker(worker, _WireInferenceController) as handle:
-            await init_or_reset_inference_controller(handle, args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(handle, args=_BROADCAST_ARGS, trainers=[])
 
-        assert worker.calls == ["is_initialized", "wait_expected_num_cells", "abort_all"]
+        assert worker.calls == ["is_initialized", "abort_update_weights", "wait_expected_num_cells", "abort_all"]
 
     async def test_the_call_the_previous_script_left_running_is_waited_out_before_the_fleet_is_aborted(
         self, monkeypatch: pytest.MonkeyPatch
@@ -714,7 +728,7 @@ class TestATakeOverDrivesARealInferenceControllerOverTheWire:
             assert await asyncio.to_thread(worker.previous_call_started.wait, 5.0)
             releaser = asyncio.create_task(_release_soon())
 
-            await init_or_reset_inference_controller(handle, args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(handle, args=_BROADCAST_ARGS, trainers=[])
 
             await previous_call
             await releaser
@@ -732,7 +746,9 @@ class TestTheExternalAgentIsStoppedByATakeOver:
 
         monkeypatch.setattr(hot_restart_module, "call_agent_abort_hook", hook)
 
-        await init_or_reset_inference_controller(_FakeInferenceController(initialized=True), args=_BROADCAST_ARGS)
+        await init_or_reset_inference_controller(
+            _FakeInferenceController(initialized=True), args=_BROADCAST_ARGS, trainers=[]
+        )
 
         assert asked == [_BROADCAST_ARGS]
 
@@ -745,7 +761,7 @@ class TestTheExternalAgentIsStoppedByATakeOver:
 
         monkeypatch.setattr(hot_restart_module, "call_agent_abort_hook", hook)
 
-        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS)
+        await init_or_reset_inference_controller(controller, args=_BROADCAST_ARGS, trainers=[])
 
         assert controller.calls[-2:] == ["abort_all", "agent_abort"]
 
@@ -758,7 +774,9 @@ class TestTheExternalAgentIsStoppedByATakeOver:
 
         monkeypatch.setattr(hot_restart_module, "call_agent_abort_hook", hook)
 
-        await init_or_reset_inference_controller(_FakeInferenceController(initialized=False), args=_BROADCAST_ARGS)
+        await init_or_reset_inference_controller(
+            _FakeInferenceController(initialized=False), args=_BROADCAST_ARGS, trainers=[]
+        )
 
         assert asked == []
 
@@ -774,10 +792,74 @@ class TestTheExternalAgentIsStoppedByATakeOver:
 
         started = time.monotonic()
         with pytest.raises(asyncio.TimeoutError):
-            await init_or_reset_inference_controller(_FakeInferenceController(initialized=True), args=_BROADCAST_ARGS)
+            await init_or_reset_inference_controller(
+                _FakeInferenceController(initialized=True), args=_BROADCAST_ARGS, trainers=[]
+            )
 
         assert time.monotonic() - started < _STALLED_SECONDS
 
     async def test_a_run_without_a_custom_agent_function_stops_nothing(self):
         """Almost every run configures none, and the real hook has to be a no-op for those."""
-        await init_or_reset_inference_controller(_FakeInferenceController(initialized=True), args=_BROADCAST_ARGS)
+        await init_or_reset_inference_controller(
+            _FakeInferenceController(initialized=True), args=_BROADCAST_ARGS, trainers=[]
+        )
+
+
+class _DrainingTrainer:
+    def __init__(self) -> None:
+        self.waiting = asyncio.Event()
+        self.finished = asyncio.Event()
+
+    async def wait_idle(self, *, timeout: float) -> None:
+        self.waiting.set()
+        await asyncio.wait_for(self.finished.wait(), timeout=timeout)
+
+
+class TestAnInterruptedWeightUpdateIsDrainedBeforeTakeOver:
+    @staticmethod
+    def _controller() -> InferenceController:
+        controller = InferenceController.__new__(InferenceController)
+        controller.args = SimpleNamespace(colocate=False)
+        controller.context_lock = ContextLock("InferenceController")
+        controller.servers = {}
+        controller._init_once = InitOnce("InferenceController")
+        with controller._init_once.guarding():
+            pass
+        return controller
+
+    async def test_take_over_releases_the_orphaned_lock_only_after_every_transfer_finishes(self) -> None:
+        """A surviving trainer must finish its transfer before the new script unlocks inference."""
+        controller = self._controller()
+        trainers = [_DrainingTrainer(), _DrainingTrainer()]
+
+        async with _handle_onto_running_worker(controller, InferenceController) as handle:
+            await handle.start_update_weights()
+            taking_over = asyncio.create_task(
+                init_or_reset_inference_controller(handle, args=_BROADCAST_ARGS, trainers=trainers)
+            )
+            try:
+                await asyncio.wait_for(asyncio.gather(*[trainer.waiting.wait() for trainer in trainers]), timeout=2)
+                assert controller.context_lock.locked
+                trainers[0].finished.set()
+                await asyncio.sleep(0)
+                assert controller.context_lock.locked
+                assert not taking_over.done()
+                trainers[1].finished.set()
+                await asyncio.wait_for(taking_over, timeout=2)
+                await handle.prepare_eval()
+                assert not controller.context_lock.locked
+            finally:
+                taking_over.cancel()
+                await asyncio.gather(taking_over, return_exceptions=True)
+
+    async def test_a_transfer_that_never_finishes_keeps_the_update_lock(self, short_take_over_budget: None) -> None:
+        """A timed-out trainer drain cannot authorize concurrent inference mutation."""
+        controller = self._controller()
+        trainer = _DrainingTrainer()
+
+        async with _handle_onto_running_worker(controller, InferenceController) as handle:
+            await handle.start_update_weights()
+            with pytest.raises(TimeoutError):
+                await init_or_reset_inference_controller(handle, args=_BROADCAST_ARGS, trainers=[trainer])
+            assert controller.context_lock.locked
+            await handle.abort_update_weights()

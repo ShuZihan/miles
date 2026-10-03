@@ -26,14 +26,16 @@ class _LoadingTrainer:
         self.args.num_rollout = request.num_rollout
         self.args.wandb_run_id = request.wandb_run_id
         self.args.mlflow_run_id = request.mlflow_run_id
-        result = model.load_model_state(
-            self.args,
-            model=[],
-            optimizer=None,
-            opt_param_scheduler=None,
-            role="actor",
-            checkpointing_context=None,
-        )
+        assert request.checkpoint_load is not None
+        with request.checkpoint_load.apply(self.args.backend):
+            result = model.load_model_state(
+                self.args,
+                model=[],
+                optimizer=None,
+                opt_param_scheduler=None,
+                role="actor",
+                checkpointing_context=None,
+            )
         return [result.start_rollout_id]
 
     async def get_train_parallel_config(self) -> None:
@@ -47,7 +49,7 @@ class _Rollout:
     async def set_train_parallel_config(self, config: Any, *, trainer_model_id: str) -> None:
         pass
 
-    async def load(self, rollout_id: int) -> None:
+    async def load(self, rollout_id: int, *, load: str | None) -> None:
         self.restored_rollouts.append(rollout_id)
 
 

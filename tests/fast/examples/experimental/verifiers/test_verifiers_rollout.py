@@ -43,7 +43,6 @@ def _args(**overrides) -> Namespace:
         "reward_key": None,
         "num_rollout": None,
         "use_miles_router": False,
-        "rollout_min_new_tokens": None,
         "rollout_max_context_len": 64,
         "rollout_max_prompt_len": None,
         "rollout_max_response_len": 8,
@@ -548,24 +547,33 @@ async def test_verifiers_episode_owns_group_reward_computation(deterministic: bo
     assert all(rollout.ctx.client is ctx.client and rollout.ctx.model == ctx.model for rollout in rollouts)
 
 
-def test_sampling_config_preserves_miles_minimum_tokens():
+@pytest.mark.parametrize("min_tokens", [None, 3])
+def test_sampling_config_accepts_runtime_args_without_train_minimum_tokens(min_tokens: int | None) -> None:
+    """Training defaults omit minimum tokens while evaluation preserves its explicit limit."""
+
     class SamplingConfig:
         @staticmethod
-        def model_validate(data):
+        def model_validate(data: dict[str, Any]) -> dict[str, Any]:
             return data
 
-    config = VerifiersRolloutFn._sampling_config(
-        SamplingConfig,
-        _args(
+    args = ImmutableNamespace.model_validate(
+        dict(
             apply_chat_template_kwargs={},
-            rollout_min_new_tokens=3,
+            rollout_max_response_len=8,
             rollout_temperature=0.7,
             rollout_top_k=20,
             rollout_top_p=0.9,
-        ),
+        )
     )
+    if min_tokens is None:
+        config = VerifiersRolloutFn._sampling_config(SamplingConfig, args)
+    else:
+        config = VerifiersRolloutFn._sampling_config(SamplingConfig, args, min_tokens=min_tokens)
 
-    assert config["min_tokens"] == 3
+    expected = {"temperature": 0.7, "top_p": 0.9, "top_k": 20, "max_tokens": 8}
+    if min_tokens is not None:
+        expected["min_tokens"] = min_tokens
+    assert config == expected
 
 
 def test_eval_args_clear_training_prompt_cap_and_preserve_other_fallbacks():

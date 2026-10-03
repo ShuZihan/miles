@@ -5,6 +5,11 @@ processes:
         checkpoint_load-0000:
           set:
             <<: &id001 {/args/backend/lr_decay_iters: 2, /args/backend/train_iters: 2}
+            /args/backend/ckpt_step: null
+            /args/backend/finetune: false
+            /args/backend/load: /root/models/gpt-oss-20b-bf16/
+            /args/backend/no_load_optim: null
+            /args/backend/no_load_rng: null
             /load: /root/models/gpt-oss-20b-bf16/
             /local_checkpoint_manager: false
         train_first_step-0000: {set: {<<: *id001, /role: actor}}
@@ -78,7 +83,6 @@ shared_overrides:
       <<:
       - &id008
         /args/ci_disable_logprobs_checker: true
-        /args/critic_load: /root/models/gpt-oss-20b-bf16/
         /args/critic_lr: 1.0e-05
         /args/enable_sample_ownership_checker: false
         /args/hf_checkpoint: /root/models/gpt-oss-20b-bf16/
@@ -108,6 +112,7 @@ shared_overrides:
             overrides: {model_path: /root/models/gpt-oss-20b-bf16/}
             worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
           update_weights: true
+        /args/start_rollout_id: null
         /args/target_modules: gate_up_proj,down_proj
         /args/use_dynamic_batch_size: false
         /args/use_wandb: false
@@ -117,7 +122,6 @@ shared_overrides:
       - &id009
         /args/init_expected_num_cells/default: 1
         /args/input_key: prompt
-        /args/load: /root/models/gpt-oss-20b-bf16/
         /args/num_layers: 24
         /args/rollout_max_response_len: 1024
       /args/wandb_run_id: null
@@ -141,7 +145,7 @@ shared_overrides:
         /args/raw_megatron/base_args/hidden_size: 2880
         /args/raw_megatron/base_args/kv_channels: 64
         /args/raw_megatron/base_args/layernorm_epsilon: 1.0e-05
-        /args/raw_megatron/base_args/load: /root/models/gpt-oss-20b-bf16/
+        /args/raw_megatron/base_args/load: null
         /args/raw_megatron/base_args/lr: 1.0e-05
         /args/raw_megatron/base_args/masked_softmax_fusion: false
         /args/raw_megatron/base_args/moe_ffn_hidden_size: 2880
@@ -173,6 +177,7 @@ shared_overrides:
       - *id010
       /args/wandb_run_id: null
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id008
       /args/backend/add_bias_linear: true
@@ -183,19 +188,15 @@ shared_overrides:
       /args/backend/bias_gelu_fusion: true
       /args/backend/encoder_num_layers: 24
       /args/backend/ffn_hidden_size: 2880
-      /args/backend/finetune: false
       /args/backend/hidden_size: 2880
       /args/backend/kv_channels: 64
       /args/backend/layernorm_epsilon: 1.0e-05
-      /args/backend/load: /root/models/gpt-oss-20b-bf16/
       /args/backend/lr: 1.0e-05
       /args/backend/masked_softmax_fusion: false
       /args/backend/moe_ffn_hidden_size: 2880
       /args/backend/moe_grouped_gemm: true
       /args/backend/moe_router_dtype: fp32
       /args/backend/moe_router_topk: 4
-      /args/backend/no_load_optim: null
-      /args/backend/no_load_rng: null
       /args/backend/num_attention_heads: 64
       /args/backend/num_experts: 32
       /args/backend/num_layers: 24
@@ -210,6 +211,7 @@ shared_overrides:
       /args/backend/window_attn_skip_freq: 2
       /args/backend/window_size: {$tuple: [128, 0]}
       /args/balance_data: false
+      /args/critic_load: null
       /args/log_probs_max_tokens_per_gpu: null
       /args/num_rollout: 1
       /args/ref_load: null

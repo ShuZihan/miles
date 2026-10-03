@@ -8,6 +8,11 @@ processes:
               /args/backend/lr_decay_iters: 2
               /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
               /args/backend/train_iters: 2
+            /args/backend/ckpt_step: null
+            /args/backend/finetune: true
+            /args/backend/load: /root/models/Qwen3-4B_torch_dist
+            /args/backend/no_load_optim: true
+            /args/backend/no_load_rng: true
             /load: /root/models/Qwen3-4B_torch_dist
             /local_checkpoint_manager: false
         checkpoint_load-0001: *id001
@@ -209,7 +214,6 @@ shared_overrides:
       - &id024
         /args/balance_data: true
         /args/eval_interval: 1
-        /args/load: /root/models/Qwen3-4B_torch_dist
         /args/log_probs_max_tokens_per_gpu: 9216
         /args/max_tokens_per_gpu: 9216
         /args/num_rollout: 2
@@ -223,7 +227,6 @@ shared_overrides:
         /args/ci_metric_checker_key: eval/gsm8k
         /args/ci_metric_checker_threshold: 0.4
         /args/colocate: false
-        /args/critic_load: /root/models/Qwen3-4B_torch_dist
         /args/eval_max_response_len: 1024
         /args/eval_prompt_data: [gsm8k, /root/datasets/gsm8k/test.parquet]
         /args/eval_top_k: 1
@@ -240,6 +243,7 @@ shared_overrides:
         /args/sglang/base_args/cuda_graph_backend_prefill: null
         /args/sglang/base_args/enable_prefill_weight_versions: true
         /args/skip_actor_forward_only: true
+        /args/start_rollout_id: null
         /args/use_tis: true
   main-01:
     set:
@@ -253,9 +257,12 @@ shared_overrides:
         /args/raw_megatron/base_args/eval_global_batch_size: 32
         /args/raw_megatron/base_args/eval_interval: 1
         /args/raw_megatron/base_args/ffn_hidden_size: 9728
+        /args/raw_megatron/base_args/finetune: false
         /args/raw_megatron/base_args/global_batch_size: 32
         /args/raw_megatron/base_args/hidden_size: 2560
-        /args/raw_megatron/base_args/load: /root/models/Qwen3-4B_torch_dist
+        /args/raw_megatron/base_args/load: null
+        /args/raw_megatron/base_args/no_load_optim: null
+        /args/raw_megatron/base_args/no_load_rng: null
         /args/raw_megatron/base_args/num_attention_heads: 32
         /args/raw_megatron/base_args/num_layers: 36
         /args/raw_megatron/base_args/num_query_groups: 8
@@ -293,17 +300,18 @@ shared_overrides:
           top_p: 1.0
         /args/namespaced_radix_cache: true
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id025
       /args/backend/disable_grad_buffers_cpu_backup: false
       /args/backend/disable_param_buffers_cpu_backup: false
       /args/backend/eval_interval: 1
-      /args/backend/load: /root/models/Qwen3-4B_torch_dist
       /args/backend/padded_vocab_size: 152064
       /args/backend/tensor_model_parallel_size: 2
       /args/backend/tokenizer_model: /root/models/Qwen3-4B
       /args/backend/wandb_project: miles-test_qwen3_4b_fully_async_eval
       /args/backend/world_size: 2
+      /args/critic_load: null
       /args/input_key: messages
   worker_manager-01:
     set:

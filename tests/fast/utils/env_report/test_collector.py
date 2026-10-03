@@ -147,7 +147,7 @@ class TestDumpArgs:
     def test_reports_trainer_backend_values_nested_under_backend(self) -> None:
         """Backend arguments remain distinct from Miles arguments in the report."""
         dump = _dump_args(make_args(lr=1.0, backend=MegatronArgsNamespace(swiglu=True, num_layers=2)))
-        assert dump.values["backend"] == {"swiglu": True, "num_layers": 2}
+        assert dump.values["backend"] == {"backend_name": "megatron", "swiglu": True, "num_layers": 2}
         assert dump.values["lr"] == 1.0
 
     def test_backend_failures_preserve_siblings_and_nested_redaction(self) -> None:

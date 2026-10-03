@@ -1,20 +1,14 @@
 --- megatron
 +++ megatron_load_fallback
-@@ -48 +48 @@
--  ckpt_step: null
-+  ckpt_step: 7
 @@ -55 +55 @@
 -  critic_load: null
-+  critic_load: $FIXTURES/ref
++  critic_load: $FIXTURES/missing
 @@ -184 +184 @@
 -  load: null
-+  load: $FIXTURES/ref
-@@ -355 +355 @@
--      ckpt_step: null
-+      ckpt_step: 7
++  load: $FIXTURES/missing
 @@ -673 +673 @@
 -      load: null
-+      load: $FIXTURES/ref
++      load: $FIXTURES/missing
 @@ -1171,2 +1171,2 @@
 -  ref_ckpt_step: null
 -  ref_load: null

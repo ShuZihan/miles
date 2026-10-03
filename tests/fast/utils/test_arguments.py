@@ -11,12 +11,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from tests.fast.fixtures.args_fixtures import parse_megatron_test_config
 from tests.fast.fixtures.megatron_config_fixtures import encode_megatron_config, write_megatron_config_trainers
 
 from miles.backends.megatron_utils.megatron_config import MegatronConfig
 from miles.backends.sglang_utils.arguments import add_sglang_arguments, collect_eval_sglang_overrides
 from miles.backends.sglang_utils.arguments import validate_args as validate_sglang_args
 from miles.utils.args.configs.router import RouterConfig
+from miles.utils.args.trainer_utils import compute_trainer_checkpoint_load
 from miles.utils.arguments import (
     FULLY_ASYNC_ROLLOUT_PATH,
     _compute_custom_inference_engine_provider_path,
@@ -2028,16 +2030,20 @@ class TestCheckpointLoadFallbackWiring:
         return args
 
     def test_a_fresh_ppo_run_starts_the_actor_and_its_critic_from_the_reference_weights(self, tmp_path):
-        """The fallback has to run before critic_load is derived, or the critic resumes from a dir nobody wrote."""
+        """Each role resolves missing checkpoints at runtime without rewriting launch configuration."""
         ref_load = tmp_path / "ref"
         ref_load.mkdir()
 
-        args = self._validate(
-            ["--advantage-estimator", "ppo", "--load", str(tmp_path / "absent"), "--ref-load", str(ref_load)]
+        args = parse_megatron_test_config(
+            "--advantage-estimator", "ppo", "--load", str(tmp_path / "absent"), "--ref-load", str(ref_load)
         )
 
-        assert args.load == str(ref_load)
-        assert args.critic_load == str(ref_load)
+        assert args.load == str(tmp_path / "absent")
+        assert args.critic_load == args.load
+        assert [compute_trainer_checkpoint_load(args, trainer).load for trainer in args.raw_megatron.trainers] == [
+            str(ref_load),
+            str(ref_load),
+        ]
 
     def test_an_existing_checkpoint_is_left_alone(self, tmp_path):
         """A real resume must keep --load, which is also what the critic inherits."""
@@ -3371,13 +3377,13 @@ class TestMilesValidateArgsCheckpointResolution:
             + REQUIRED_ARGS
         )
 
-    def test_a_single_policy_run_still_resolves_its_checkpoint_fallback(self, tmp_path):
-        """The fallback is what lets a fresh run start from --ref-load, and it must survive the multi policy fork."""
+    def test_a_single_policy_run_defers_its_checkpoint_fallback_to_runtime(self, tmp_path):
+        """Saving a checkpoint must not change the arguments used to render a persistent trainer Pod."""
         args = self._parse([], tmp_path)
 
         miles_validate_args(args)
 
-        assert (args.load, args.finetune, args.start_rollout_id) == (str(tmp_path), True, 0)
+        assert (args.load, args.finetune, args.start_rollout_id) == (None, False, None)
 
     def test_a_multi_policy_run_leaves_the_global_load_and_save_untouched(self, tmp_path):
         """Each trainer resolves its own fallback later; settling it globally would point every policy at one dir."""

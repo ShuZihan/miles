@@ -14,8 +14,8 @@ class TestFreshMultiPolicyStartup:
         """Fresh HF policy workers must not turn an unspecified start into a checkpoint resume."""
         startup = fresh_policy_startup
         assert startup.args.start_rollout_id is None
-        assert all(handle.args.start_rollout_id == 0 for handle in startup.handles.values())
-        assert all(not handle.args.backend.finetune for handle in startup.handles.values())
+        assert all(handle.args.start_rollout_id is None for handle in startup.handles.values())
+        assert all("finetune" not in vars(handle.args.backend) for handle in startup.handles.values())
 
         trainers = await create_trainers(
             startup.args,

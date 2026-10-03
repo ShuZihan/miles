@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 4
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 4
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/GLM-4.7-Flash_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/GLM-4.7-Flash_torch_dist
           /local_checkpoint_manager: false
       checkpoint_load-0001: *id001
@@ -29,7 +34,6 @@ processes:
         <<:
         - &id004
           /args/config_snapshot_name: tests/e2e/megatron/test_glm47_flash/test_r3_mtp/run-0000
-          /args/critic_load: /root/GLM-4.7-Flash_torch_dist
           /args/enable_mtp_training: true
           /args/eval_max_response_len: 16384
           /args/eval_prompt_data: [aime24, /root/datasets/aime-2024/aime-2024.jsonl]
@@ -53,11 +57,11 @@ processes:
               overrides: {model_path: /root/models/GLM-4.7-Flash}
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
+          /args/start_rollout_id: null
           /args/use_rollout_routing_replay: true
           /args/use_routing_replay: true
         - &id005
           /args/input_key: prompt
-          /args/load: /root/GLM-4.7-Flash_torch_dist
           /args/num_layers: 47
           /args/num_rollout: 2
           /args/use_kl_loss: true
@@ -87,13 +91,14 @@ processes:
           /args/raw_megatron/base_args/exp_avg_sq_dtype/$torch: torch.float16
           /args/raw_megatron/base_args/expert_model_parallel_size: 4
           /args/raw_megatron/base_args/ffn_hidden_size: 10240
+          /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 32
           /args/raw_megatron/base_args/group_query_attention: false
           /args/raw_megatron/base_args/hidden_size: 2048
           /args/raw_megatron/base_args/kv_channels: 192
           /args/raw_megatron/base_args/kv_lora_rank: 512
           /args/raw_megatron/base_args/layernorm_epsilon: 1.0e-05
-          /args/raw_megatron/base_args/load: /root/GLM-4.7-Flash_torch_dist
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/main_params_dtype/$torch: torch.float16
           /args/raw_megatron/base_args/make_vocab_size_divisible_by: 64
           /args/raw_megatron/base_args/moe_ffn_hidden_size: 1536
@@ -112,6 +117,8 @@ processes:
           /args/raw_megatron/base_args/moe_shared_expert_intermediate_size: 1536
           /args/raw_megatron/base_args/mtp_num_layers: 1
           /args/raw_megatron/base_args/multi_latent_attention: true
+          /args/raw_megatron/base_args/no_load_optim: null
+          /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 20
           /args/raw_megatron/base_args/num_experts: 64
           /args/raw_megatron/base_args/num_layers: 47
@@ -176,6 +183,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/add_position_embedding: false
@@ -193,7 +201,6 @@ shared_overrides:
       /args/backend/kv_channels: 192
       /args/backend/kv_lora_rank: 512
       /args/backend/layernorm_epsilon: 1.0e-05
-      /args/backend/load: /root/GLM-4.7-Flash_torch_dist
       /args/backend/main_params_dtype/$torch: torch.float16
       /args/backend/make_vocab_size_divisible_by: 64
       /args/backend/moe_ffn_hidden_size: 1536
@@ -232,6 +239,7 @@ shared_overrides:
       /args/backend/wandb_project: miles-test_r3_mtp
       /args/backend/world_size: 8
       /args/balance_data: false
+      /args/critic_load: null
       /args/init_expected_num_cells/default: 2
       /args/rollout_max_response_len: 8192
       /args/rollout_temperature: 1.0

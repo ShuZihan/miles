@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 2
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 2
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: false
+          /args/backend/load: /root/models/Kimi-K2.5-2layer-bf16
+          /args/backend/no_load_optim: null
+          /args/backend/no_load_rng: null
           /load: /root/models/Kimi-K2.5-2layer-bf16
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -29,7 +34,7 @@ processes:
         - &id003
           /args/balance_data: true
           /args/config_snapshot_name: tests/e2e/megatron/model_scripts/test_kimi_k25_2layer_ci/run-0000
-          /args/critic_load: /root/models/Kimi-K2.5-2layer-bf16
+          /args/critic_load: /root/shared_data/$RUN_ID_0000/checkpoints
           /args/critic_save: /root/shared_data/$RUN_ID_0000/checkpoints_critic
           /args/hf_checkpoint: /root/models/Kimi-K2.5-2layer
           /args/init_expected_num_cells/default: 1
@@ -54,12 +59,13 @@ processes:
             update_weights: true
           /args/sglang_server_concurrency: 1024
           /args/skip_actor_forward_only: true
+          /args/start_rollout_id: null
           /args/use_dynamic_global_batch_size: true
         - &id004
           /args/ci_disable_logprobs_checker: true
           /args/global_batch_size: 256
           /args/input_key: prompt
-          /args/load: /root/models/Kimi-K2.5-2layer-bf16
+          /args/load: /root/shared_data/$RUN_ID_0000/checkpoints
           /args/log_inference_engine_weight_checksums: true
           /args/log_probs_max_tokens_per_gpu: 2048
           /args/max_tokens_per_gpu: 2048
@@ -105,7 +111,7 @@ processes:
           /args/raw_megatron/base_args/kv_channels: 64
           /args/raw_megatron/base_args/kv_lora_rank: 512
           /args/raw_megatron/base_args/layernorm_epsilon: 1.0e-05
-          /args/raw_megatron/base_args/load: /root/models/Kimi-K2.5-2layer-bf16
+          /args/raw_megatron/base_args/load: /root/shared_data/$RUN_ID_0000/checkpoints
           /args/raw_megatron/base_args/moe_ffn_hidden_size: 2048
           /args/raw_megatron/base_args/moe_grouped_gemm: true
           /args/raw_megatron/base_args/moe_layer_freq: [0, 1]
@@ -163,7 +169,8 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-01:
-    remove: [/args/backend/indexer_rope_interleave]
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/indexer_rope_interleave, /args/backend/load, /args/backend/no_load_optim,
+      /args/backend/no_load_rng]
     set:
       <<: *id003
       /args/allgather_cp: false
@@ -178,12 +185,10 @@ shared_overrides:
       /args/backend/encoder_num_layers: 2
       /args/backend/eval_global_batch_size: 256
       /args/backend/ffn_hidden_size: 18432
-      /args/backend/finetune: false
       /args/backend/global_batch_size: 256
       /args/backend/gradient_accumulation_fusion: false
       /args/backend/hidden_size: 7168
       /args/backend/kv_channels: 64
-      /args/backend/load: /root/models/Kimi-K2.5-2layer-bf16
       /args/backend/make_vocab_size_divisible_by: 128
       /args/backend/moe_enable_deepep: false
       /args/backend/moe_layer_freq: [0, 1]
@@ -192,8 +197,6 @@ shared_overrides:
       /args/backend/moe_router_topk_scaling_factor: 2.827
       /args/backend/moe_token_dispatcher_type: alltoall
       /args/backend/mscale_all_dim: 1.0
-      /args/backend/no_load_optim: null
-      /args/backend/no_load_rng: null
       /args/backend/num_experts: 384
       /args/backend/num_layers: 2
       /args/backend/padded_vocab_size: 163840

@@ -99,6 +99,11 @@ processes:
             /args/backend/lr_decay_iters: 1
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 1
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/models/DeepSeek-V4-Flash-FP8-4layer_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/models/DeepSeek-V4-Flash-FP8-4layer_torch_dist
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -235,16 +240,11 @@ shared_overrides:
   inference_controller-01:
     set:
       <<:
-      - &id016
-        /args/balance_data: true
-        /args/global_batch_size: 16
-        /args/load: /root/models/DeepSeek-V4-Flash-FP8-4layer_torch_dist
-        /args/num_layers: 4
+      - &id016 {/args/balance_data: true, /args/global_batch_size: 16, /args/num_layers: 4}
       - &id017
         /args/check_weight_update_allow_quant_error: true
         /args/check_weight_update_equal: false
         /args/ci_disable_logprobs_checker: true
-        /args/critic_load: /root/models/DeepSeek-V4-Flash-FP8-4layer_torch_dist
         /args/dsv4_impl: miles
         /args/enable_sample_ownership_checker: false
         /args/eval_max_response_len: 256
@@ -270,6 +270,7 @@ shared_overrides:
         /args/sglang/base_args/cuda_graph_max_bs_decode: 4
         /args/sglang/base_args/ep_size: 4
         /args/sglang/base_args/tp_size: 4
+        /args/start_rollout_id: null
         /args/update_weight_buffer_size: 1073741824
         /args/use_dynamic_batch_size: false
         /args/use_rollout_routing_replay: true
@@ -307,6 +308,7 @@ shared_overrides:
         /args/raw_megatron/base_args/experimental_attention_variant: dsv4
         /args/raw_megatron/base_args/expert_model_parallel_size: 4
         /args/raw_megatron/base_args/ffn_hidden_size: 2048
+        /args/raw_megatron/base_args/finetune: false
         /args/raw_megatron/base_args/fp8: e4m3
         /args/raw_megatron/base_args/fp8_recipe: blockwise
         /args/raw_megatron/base_args/freeze_e_score_correction_bias: true
@@ -315,7 +317,7 @@ shared_overrides:
         /args/raw_megatron/base_args/hidden_size: 4096
         /args/raw_megatron/base_args/kv_channels: 64
         /args/raw_megatron/base_args/kv_lora_rank: 512
-        /args/raw_megatron/base_args/load: /root/models/DeepSeek-V4-Flash-FP8-4layer_torch_dist
+        /args/raw_megatron/base_args/load: null
         /args/raw_megatron/base_args/moe_ffn_hidden_size: 2048
         /args/raw_megatron/base_args/moe_grouped_gemm: true
         /args/raw_megatron/base_args/moe_layer_freq: [1, 1, 1, 1]
@@ -329,6 +331,8 @@ shared_overrides:
         /args/raw_megatron/base_args/moe_router_topk_scaling_factor: 1.5
         /args/raw_megatron/base_args/moe_shared_expert_intermediate_size: 2048
         /args/raw_megatron/base_args/multi_latent_attention: true
+        /args/raw_megatron/base_args/no_load_optim: null
+        /args/raw_megatron/base_args/no_load_rng: null
         /args/raw_megatron/base_args/num_attention_heads: 64
         /args/raw_megatron/base_args/num_experts: 256
         /args/raw_megatron/base_args/num_layers: 4
@@ -378,6 +382,7 @@ shared_overrides:
         top_p: 1.0
       /args/wandb_run_id: null
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id017
       /args/backend/activation_func_clamp_shared_expert: false
@@ -408,7 +413,6 @@ shared_overrides:
       /args/backend/hidden_size: 4096
       /args/backend/kv_channels: 64
       /args/backend/kv_lora_rank: 512
-      /args/backend/load: /root/models/DeepSeek-V4-Flash-FP8-4layer_torch_dist
       /args/backend/moe_ffn_hidden_size: 2048
       /args/backend/moe_grouped_gemm: true
       /args/backend/moe_layer_freq: [1, 1, 1, 1]
@@ -444,6 +448,7 @@ shared_overrides:
       /args/backend/use_rotary_position_embeddings: false
       /args/backend/v_head_dim: 512
       /args/backend/vocab_size: 129280
+      /args/critic_load: null
       /args/input_key: messages
       /args/log_probs_max_tokens_per_gpu: null
       /args/num_rollout: 1

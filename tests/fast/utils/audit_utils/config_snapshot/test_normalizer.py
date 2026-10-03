@@ -293,7 +293,7 @@ class TestGeneratedPathNormalization:
     @pytest.mark.parametrize("run_id", [None, "explicit", "automatic"])
     def test_tracking_ids_normalize_only_when_present(self, make_record: Callable, run_id: str | None) -> None:
         """Tracking identity is hidden while disabled tracking and unrelated values stay observable."""
-        record = make_record(config={"args": {"wandb_run_id": run_id, "wandb_group": "explicit"}})
+        record = make_record(config={"wandb_run_id": run_id, "wandb_group": "explicit"})
         assert normalize_record(record) == {
             "args": {"wandb_run_id": None if run_id is None else "$WANDB_RUN_ID_0000", "wandb_group": "explicit"}
         }

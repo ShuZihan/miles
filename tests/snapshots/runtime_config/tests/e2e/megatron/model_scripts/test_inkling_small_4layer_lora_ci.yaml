@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 8
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 8
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/models/Inkling-Small-4layer_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/models/Inkling-Small-4layer_torch_dist
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -176,6 +181,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/apply_rope_fusion: false
@@ -189,7 +195,6 @@ shared_overrides:
       /args/backend/ffn_hidden_size: 2048
       /args/backend/global_batch_size: 64
       /args/backend/hidden_size: 4096
-      /args/backend/load: /root/models/Inkling-Small-4layer_torch_dist
       /args/backend/lr: 5.0e-06
       /args/backend/masked_softmax_fusion: false
       /args/backend/moe_ffn_hidden_size: 2048

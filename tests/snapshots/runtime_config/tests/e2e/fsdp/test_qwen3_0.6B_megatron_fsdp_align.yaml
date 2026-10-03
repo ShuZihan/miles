@@ -278,7 +278,12 @@ processes:
       checkpoint_load-0000:
         set:
           <<: *id013
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/models/Qwen3-0.6B_torch_dist
           /args/backend/model_type: &id014 {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/models/Qwen3-0.6B_torch_dist
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -297,11 +302,10 @@ processes:
         - &id016
           /args/ci_load_grad_norm: grad_norm_fsdp.pt
           /args/config_snapshot_name: tests/e2e/fsdp/test_qwen3_0.6B_megatron_fsdp_align/run-0002
-          /args/critic_load: /root/models/Qwen3-0.6B_torch_dist
           /args/ref_load: /root/models/Qwen3-0.6B_torch_dist
           /args/skip_actor_forward_only: true
+          /args/start_rollout_id: null
           /args/train_memory_margin_bytes: 3221225472
-        /args/load: /root/models/Qwen3-0.6B_torch_dist
     template: inference_controller-01
   tests/e2e/fsdp/test_qwen3_0.6B_megatron_fsdp_align/run-0002/all/default/main:
     diffs: *id015
@@ -332,9 +336,12 @@ processes:
           /args/raw_megatron/base_args/encoder_num_layers: 28
           /args/raw_megatron/base_args/eval_global_batch_size: 64
           /args/raw_megatron/base_args/ffn_hidden_size: 3072
+          /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 64
           /args/raw_megatron/base_args/hidden_size: 1024
-          /args/raw_megatron/base_args/load: /root/models/Qwen3-0.6B_torch_dist
+          /args/raw_megatron/base_args/load: null
+          /args/raw_megatron/base_args/no_load_optim: null
+          /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 16
           /args/raw_megatron/base_args/num_layers: 28
           /args/raw_megatron/base_args/num_query_groups: 8
@@ -345,7 +352,6 @@ processes:
           /args/raw_megatron/base_args/untie_embeddings_and_output_weights: false
           /args/raw_megatron/base_args/wandb_project: miles-test_qwen3_0.6B_megatron_fsdp_align
           /args/raw_megatron/base_args/world_size: 2
-        /args/load: /root/models/Qwen3-0.6B_torch_dist
     template: main-01
   tests/e2e/fsdp/test_qwen3_0.6B_megatron_fsdp_align/run-0002/all/default/rollout_executor:
     overrides: *id017
@@ -364,7 +370,6 @@ processes:
         - *id020
         - *id021
         /args/actor_num_gpus_per_node: 2
-        /args/load: /root/models/Qwen3-0.6B_torch_dist
         /args/rollout_num_gpus: 0
     template: worker_manager-01
 shared_overrides:
@@ -388,7 +393,8 @@ shared_overrides:
       /args/sglang/base_args/attention_backend: null
       /args/sglang/base_args/decode_log_interval: 40
   trainer-megatron-02:
-    remove: *id008
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng,
+      /args/init_expected_num_cells/default]
     set:
       <<:
       - *id009
@@ -401,12 +407,12 @@ shared_overrides:
       /args/backend/eval_global_batch_size: 64
       /args/backend/ffn_hidden_size: 3072
       /args/backend/hidden_size: 1024
-      /args/backend/load: /root/models/Qwen3-0.6B_torch_dist
       /args/backend/num_attention_heads: 16
       /args/backend/sequence_parallel: false
       /args/backend/tokenizer_model: /root/models/Qwen3-0.6B/
       /args/backend/wandb_project: miles-test_qwen3_0.6B_megatron_fsdp_align
       /args/backend/world_size: 2
       /args/balance_data: false
+      /args/critic_load: null
       /args/rollout_temperature: 1.0
       /args/use_kl_loss: false

@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 2
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 2
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: false
+          /args/backend/load: /root/models/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16-4layer
+          /args/backend/no_load_optim: null
+          /args/backend/no_load_rng: null
           /load: /root/models/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16-4layer
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -31,14 +36,12 @@ processes:
           /args/global_batch_size: 16
           /args/init_expected_num_cells/default: 1
           /args/input_key: prompt
-          /args/load: /root/models/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16-4layer
           /args/num_layers: 4
           /args/num_rollout: 2
           /args/wandb_project: miles-run_nemotron_3_ultra_550b_a55b
         - &id004
           /args/ci_disable_logprobs_checker: true
           /args/config_snapshot_name: tests/e2e/megatron/model_scripts/test_nemotron_3_ultra_4layer_ci/run-0000
-          /args/critic_load: /root/models/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16-4layer
           /args/dump_details: /root/shared_data/$RUN_ID_0000/dump_details
           /args/hf_checkpoint: /root/models/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16-4layer
           /args/log_inference_engine_weight_checksums: true
@@ -68,6 +71,7 @@ processes:
               overrides: {model_path: /root/models/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16-4layer}
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
+          /args/start_rollout_id: null
           /args/wandb_group: $RUN_ID_0000_$CI_COMMIT_NAME_github
     template: inference_controller-01
   tests/e2e/megatron/model_scripts/test_nemotron_3_ultra_4layer_ci/run-0000/all/default/main:
@@ -94,7 +98,7 @@ processes:
           /args/raw_megatron/base_args/global_batch_size: 16
           /args/raw_megatron/base_args/hidden_size: 8192
           /args/raw_megatron/base_args/layernorm_epsilon: 1.0e-05
-          /args/raw_megatron/base_args/load: /root/models/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16-4layer
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/moe_ffn_hidden_size: 5120
           /args/raw_megatron/base_args/moe_grouped_gemm: true
           /args/raw_megatron/base_args/moe_latent_size: 2048
@@ -158,6 +162,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/apply_rope_fusion: false
@@ -167,11 +172,9 @@ shared_overrides:
       /args/backend/eval_global_batch_size: 16
       /args/backend/expert_model_parallel_size: 8
       /args/backend/ffn_hidden_size: 5120
-      /args/backend/finetune: false
       /args/backend/global_batch_size: 16
       /args/backend/hidden_size: 8192
       /args/backend/layernorm_epsilon: 1.0e-05
-      /args/backend/load: /root/models/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16-4layer
       /args/backend/moe_ffn_hidden_size: 5120
       /args/backend/moe_grouped_gemm: true
       /args/backend/moe_latent_size: 2048
@@ -186,8 +189,6 @@ shared_overrides:
       /args/backend/moe_router_topk: 22
       /args/backend/moe_router_topk_scaling_factor: 5.0
       /args/backend/moe_shared_expert_intermediate_size: 10240
-      /args/backend/no_load_optim: null
-      /args/backend/no_load_rng: null
       /args/backend/num_attention_heads: 64
       /args/backend/num_experts: 512
       /args/backend/num_layers: 4
@@ -207,5 +208,6 @@ shared_overrides:
       /args/backend/vocab_size: 131072
       /args/backend/wandb_project: miles-run_nemotron_3_ultra_550b_a55b
       /args/backend/world_size: 8
+      /args/critic_load: null
       /args/rollout_temperature: 1.0
       /args/use_kl_loss: false

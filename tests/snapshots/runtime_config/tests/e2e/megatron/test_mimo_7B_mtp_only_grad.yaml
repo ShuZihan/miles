@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 1
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 1
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/models/MiMo-7B-RL_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/models/MiMo-7B-RL_torch_dist
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -30,7 +35,6 @@ processes:
           /args/check_rematerialize_param_from_master_weight: true
           /args/ci_disable_kl_checker: true
           /args/config_snapshot_name: tests/e2e/megatron/test_mimo_7B_mtp_only_grad/run-0000
-          /args/critic_load: /root/models/MiMo-7B-RL_torch_dist
           /args/enable_mtp_training: true
           /args/hf_checkpoint: /root/models/MiMo-7B-RL/
           /args/init_expected_num_cells/default: 4
@@ -55,10 +59,10 @@ processes:
               overrides: {model_path: /root/models/MiMo-7B-RL/}
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
+          /args/start_rollout_id: null
         - &id004
           /args/global_batch_size: 8
           /args/input_key: prompt
-          /args/load: /root/models/MiMo-7B-RL_torch_dist
           /args/rollout_temperature: 0.8
           /args/wandb_project: miles-test_mimo_7B_mtp_only_grad
     template: inference_controller-01
@@ -81,11 +85,14 @@ processes:
           /args/raw_megatron/base_args/eval_global_batch_size: 8
           /args/raw_megatron/base_args/expert_tensor_parallel_size: 2
           /args/raw_megatron/base_args/ffn_hidden_size: 11008
+          /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 8
           /args/raw_megatron/base_args/hidden_size: 4096
           /args/raw_megatron/base_args/layernorm_epsilon: 1.0e-05
-          /args/raw_megatron/base_args/load: /root/models/MiMo-7B-RL_torch_dist
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/mtp_num_layers: 1
+          /args/raw_megatron/base_args/no_load_optim: null
+          /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 32
           /args/raw_megatron/base_args/num_layers: 36
           /args/raw_megatron/base_args/num_query_groups: 8
@@ -115,6 +122,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id003
       /args/backend/add_qkv_bias: true
@@ -125,7 +133,6 @@ shared_overrides:
       /args/backend/global_batch_size: 8
       /args/backend/hidden_size: 4096
       /args/backend/layernorm_epsilon: 1.0e-05
-      /args/backend/load: /root/models/MiMo-7B-RL_torch_dist
       /args/backend/mtp_num_layers: 1
       /args/backend/padded_vocab_size: 151808
       /args/backend/qk_layernorm: false
@@ -136,5 +143,6 @@ shared_overrides:
       /args/backend/vocab_size: 151680
       /args/backend/wandb_project: miles-test_mimo_7B_mtp_only_grad
       /args/balance_data: false
+      /args/critic_load: null
       /args/num_rollout: 1
       /args/use_kl_loss: false

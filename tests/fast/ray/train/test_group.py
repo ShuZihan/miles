@@ -1515,7 +1515,7 @@ class TestUpdateWeightsReachesTheWorker:
             ray.get(handle.set_update_weights_return_value.remote(_output(1)))
         assert _outcome_of(await group.update_weights(info=info)) == _outcome_of(_output(1))
 
-        await group.load_state()
+        await group.load_state(TrainerControllerInitRequest(num_rollout=None, wandb_run_id=None, mlflow_run_id=None))
         for handle in handles:
             ray.get(handle.set_update_weights_return_value.remote(_output(2)))
 
@@ -2060,7 +2060,7 @@ class TestWeightUpdateResultEvent:
             ray.get(handle.set_update_weights_return_value.remote(_output(1)))
         before = await group.update_weights(info=info)
 
-        await group.load_state()
+        await group.load_state(TrainerControllerInitRequest(num_rollout=None, wandb_run_id=None, mlflow_run_id=None))
         after = await group.update_weights(info=info)
 
         first, second = self._results(_event_log_dir)

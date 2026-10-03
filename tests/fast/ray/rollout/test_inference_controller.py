@@ -800,6 +800,24 @@ class TestUpdateWeightsLockWindow:
         await controller.abort_update_weights()
         assert not controller.context_lock.locked
 
+    async def test_aborting_without_a_pending_update_leaves_the_controller_usable(self) -> None:
+        """A takeover without an interrupted weight update must still reset the fleet."""
+        controller = _make_controller({})
+
+        await controller.abort_update_weights()
+        await controller.prepare_eval()
+
+        assert not controller.context_lock.locked
+
+    async def test_aborting_an_update_does_not_release_an_ordinary_active_call(self) -> None:
+        """Recovery may release an abandoned update window but never another call's lock."""
+        controller = _make_controller({})
+
+        async with controller.context_lock:
+            await asyncio.create_task(controller.abort_update_weights())
+            assert controller.context_lock.locked
+            assert controller.context_lock.held_in_current_context
+
     @pytest.mark.asyncio
     async def test_reconcile_waits_while_the_update_weights_window_is_open(self):
         """A concurrent reconcile must not mutate the engine set mid weight update."""

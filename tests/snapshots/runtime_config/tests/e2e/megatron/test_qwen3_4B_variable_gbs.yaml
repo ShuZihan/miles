@@ -5,10 +5,17 @@ processes:
         set:
           <<:
           - &id001
+            /args/backend/ckpt_step: null
+            /args/backend/load: /root/Qwen3-4B_torch_dist
+            /load: /root/Qwen3-4B_torch_dist
+            /local_checkpoint_manager: false
+          - &id002
             /args/backend/lr_decay_iters: 4
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 4
-          - &id002 {/load: /root/Qwen3-4B_torch_dist, /local_checkpoint_manager: false}
+          /args/backend/finetune: false
+          /args/backend/no_load_optim: null
+          /args/backend/no_load_rng: null
       checkpoint_load-0001:
         set:
           <<:
@@ -19,7 +26,7 @@ processes:
           /args/backend/no_load_rng: true
       train_first_step-0000:
         set:
-          <<: *id001
+          <<: *id002
           /role: actor
     ranks: [0, 1, 2, 3]
     template: trainer-megatron-02
@@ -37,7 +44,6 @@ processes:
         - &id004
           /args/allow_partial_train_step: true
           /args/config_snapshot_name: tests/e2e/megatron/test_qwen3_4B_variable_gbs/run-0000
-          /args/critic_load: /root/Qwen3-4B_torch_dist
           /args/disable_rollout_trim_samples: true
           /args/log_probs_max_tokens_per_gpu: 8192
           /args/max_tokens_per_gpu: 8192
@@ -57,10 +63,10 @@ processes:
               overrides: {model_path: /root/models/Qwen3-4B/}
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
+          /args/start_rollout_id: null
         - &id005
           /args/global_batch_size: 24
           /args/input_key: prompt
-          /args/load: /root/Qwen3-4B_torch_dist
           /args/rollout_temperature: 0.8
           /args/use_kl_loss: true
           /args/wandb_project: miles-test_qwen3_4B_variable_gbs
@@ -85,7 +91,7 @@ processes:
         /args/raw_megatron/base_args/finetune: false
         /args/raw_megatron/base_args/global_batch_size: 24
         /args/raw_megatron/base_args/hidden_size: 2560
-        /args/raw_megatron/base_args/load: /root/Qwen3-4B_torch_dist
+        /args/raw_megatron/base_args/load: null
         /args/raw_megatron/base_args/no_load_optim: null
         /args/raw_megatron/base_args/no_load_rng: null
         /args/raw_megatron/base_args/num_attention_heads: 32
@@ -110,17 +116,15 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/context_parallel_size: 2
       /args/backend/data_parallel_size: 2
       /args/backend/eval_global_batch_size: 24
-      /args/backend/finetune: false
       /args/backend/global_batch_size: 24
-      /args/backend/load: /root/Qwen3-4B_torch_dist
-      /args/backend/no_load_optim: null
-      /args/backend/no_load_rng: null
       /args/backend/sequence_parallel: false
       /args/backend/wandb_project: miles-test_qwen3_4B_variable_gbs
       /args/balance_data: false
+      /args/critic_load: null
       /args/init_expected_num_cells/default: 2

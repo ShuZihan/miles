@@ -7,7 +7,12 @@ processes:
             /args/backend/lr_decay_iters: 2
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 2
-          /load: /root/models/Kimi-K3-4layer-64experts-bf16_torch_dist
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/models/Kimi-K3-4layer-64experts-bf16-kda-direct-v1_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
+          /load: /root/models/Kimi-K3-4layer-64experts-bf16-kda-direct-v1_torch_dist
           /local_checkpoint_manager: false
       train_first_step-0000:
         set:
@@ -30,7 +35,6 @@ processes:
           /args/balance_data: true
           /args/global_batch_size: 64
           /args/init_expected_num_cells/default: 1
-          /args/load: /root/models/Kimi-K3-4layer-64experts-bf16_torch_dist
           /args/num_layers: 4
           /args/num_rollout: 2
           /args/wandb_project: miles-run_kimi_k3
@@ -39,14 +43,13 @@ processes:
           /args/check_weight_update_skip_list: [vision_tower., mm_projector.]
           /args/ci_disable_logprobs_checker: true
           /args/config_snapshot_name: tests/e2e/megatron/model_scripts/test_kimi_k3_4layer_ci/run-0000
-          /args/critic_load: /root/models/Kimi-K3-4layer-64experts-bf16_torch_dist
           /args/hf_checkpoint: /root/models/Kimi-K3-4layer-64experts
           /args/log_probs_chunk_size: 512
           /args/log_probs_max_tokens_per_gpu: 512
           /args/max_tokens_per_gpu: 512
           /args/model_name: kimi_k3
           /args/prompt_data: /root/datasets/gsm8k/train.parquet
-          /args/ref_load: /root/models/Kimi-K3-4layer-64experts-bf16_torch_dist
+          /args/ref_load: /root/models/Kimi-K3-4layer-64experts-bf16-kda-direct-v1_torch_dist
           /args/rm_type: deterministic_random
           /args/rollout_max_response_len: 256
           /args/rollout_num_gpus_per_engine: 8
@@ -66,6 +69,7 @@ processes:
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
           /args/sglang_server_concurrency: 16
+          /args/start_rollout_id: null
           /args/train_memory_margin_bytes: 4294967296
           /args/update_weight_buffer_size: 2147483648
           /args/use_dynamic_global_batch_size: true
@@ -93,13 +97,14 @@ processes:
           /args/raw_megatron/base_args/eval_global_batch_size: 64
           /args/raw_megatron/base_args/expert_model_parallel_size: 8
           /args/raw_megatron/base_args/ffn_hidden_size: 33792
+          /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 64
           /args/raw_megatron/base_args/group_query_attention: false
           /args/raw_megatron/base_args/hidden_size: 7168
           /args/raw_megatron/base_args/kv_channels: 256
           /args/raw_megatron/base_args/kv_lora_rank: 512
           /args/raw_megatron/base_args/layernorm_epsilon: 1.0e-05
-          /args/raw_megatron/base_args/load: /root/models/Kimi-K3-4layer-64experts-bf16_torch_dist
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/moe_ffn_hidden_size: 3072
           /args/raw_megatron/base_args/moe_grouped_gemm: true
           /args/raw_megatron/base_args/moe_latent_size: 3584
@@ -115,6 +120,8 @@ processes:
           /args/raw_megatron/base_args/moe_router_topk_scaling_factor: 1.0
           /args/raw_megatron/base_args/moe_shared_expert_intermediate_size: 6144
           /args/raw_megatron/base_args/multi_latent_attention: true
+          /args/raw_megatron/base_args/no_load_optim: null
+          /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 96
           /args/raw_megatron/base_args/num_experts: 64
           /args/raw_megatron/base_args/num_layers: 4
@@ -156,6 +163,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/apply_rope_fusion: false
@@ -172,7 +180,6 @@ shared_overrides:
       /args/backend/kv_channels: 256
       /args/backend/kv_lora_rank: 512
       /args/backend/layernorm_epsilon: 1.0e-05
-      /args/backend/load: /root/models/Kimi-K3-4layer-64experts-bf16_torch_dist
       /args/backend/moe_ffn_hidden_size: 3072
       /args/backend/moe_grouped_gemm: true
       /args/backend/moe_latent_size: 3584
@@ -209,6 +216,7 @@ shared_overrides:
       /args/backend/vocab_size: 163840
       /args/backend/wandb_project: miles-run_kimi_k3
       /args/backend/world_size: 8
+      /args/critic_load: null
       /args/input_key: messages
       /args/rollout_temperature: 1.0
       /args/use_kl_loss: false

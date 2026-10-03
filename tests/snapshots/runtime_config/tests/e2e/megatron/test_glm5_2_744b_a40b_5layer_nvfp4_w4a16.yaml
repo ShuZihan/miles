@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 2
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 2
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/models/GLM-5.2_5layer_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/models/GLM-5.2_5layer_torch_dist
           /local_checkpoint_manager: false
       checkpoint_load-0001: *id001
@@ -15,8 +20,9 @@ processes:
           <<: *id002
           /role: actor
     overrides:
+      remove: &id008 [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
       set:
-        <<: &id008
+        <<: &id009
           /args/backend/gradient_accumulation_fusion: false
           /args/backend/te_precision_config_file: base64:Y29uZmlnczoKICAgIGJmMTY6CiAgICAgICAgdHJhbnNmb3JtZXJfZW5naW5lX2NvbmZpZ190eXBlOiAiVEVRdWFudGl6YXRpb25QYXJhbXMiCiAgICAgICAgdHJhaW5pbmdfcmVjaXBlOiB7fQptYXRjaGVyczoKICAgIGRlZmF1bHRfYmYxNjoKICAgICAgICB0eXBlOiAiZ2xvYiIKICAgICAgICBlbmFibGVkOiB0cnVlCiAgICAgICAgcGF0dGVybjogIioiCiAgICAgICAgY29uZmlnOiAiYmYxNiI=
           /args/backend/tokenizer_model: /root/models/GLM-5.2_5layer-NVFP4/
@@ -36,7 +42,6 @@ processes:
       set:
         <<: &id004
           /args/global_batch_size: 64
-          /args/load: /root/models/GLM-5.2_5layer_torch_dist
           /args/num_layers: 5
           /args/rollout_indexer_topk_num_streams: 5
           /args/wandb_project: miles-test_glm5_2_744b_a40b_5layer_nvfp4_w4a16
@@ -45,6 +50,7 @@ processes:
         /args/distributed_backend: nccl
         /args/distributed_timeout_minutes: 10
         /args/eval_interval: null
+        /args/load: null
         /args/low_memory_resume: false
         /args/micro_batch_size: 1
         /args/save: null
@@ -67,7 +73,6 @@ processes:
           /args/allgather_cp: true
           /args/ci_disable_logprobs_checker: true
           /args/colocate: false
-          /args/critic_load: /root/models/GLM-5.2_5layer_torch_dist
           /args/input_key: prompt
           /args/log_probs_max_tokens_per_gpu: 2048
           /args/max_tokens_per_gpu: 2048
@@ -82,6 +87,7 @@ processes:
           /args/raw_megatron/base_args/eval_global_batch_size: 64
           /args/raw_megatron/base_args/expert_model_parallel_size: 4
           /args/raw_megatron/base_args/ffn_hidden_size: 12288
+          /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 64
           /args/raw_megatron/base_args/gradient_accumulation_fusion: false
           /args/raw_megatron/base_args/group_query_attention: false
@@ -90,7 +96,7 @@ processes:
           /args/raw_megatron/base_args/kv_channels: 192
           /args/raw_megatron/base_args/kv_lora_rank: 512
           /args/raw_megatron/base_args/layernorm_epsilon: 1.0e-05
-          /args/raw_megatron/base_args/load: /root/models/GLM-5.2_5layer_torch_dist
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/make_vocab_size_divisible_by: 16
           /args/raw_megatron/base_args/moe_enable_deepep: true
           /args/raw_megatron/base_args/moe_ffn_hidden_size: 2048
@@ -108,6 +114,8 @@ processes:
           /args/raw_megatron/base_args/moe_shared_expert_intermediate_size: 2048
           /args/raw_megatron/base_args/moe_token_dispatcher_type: flex
           /args/raw_megatron/base_args/multi_latent_attention: true
+          /args/raw_megatron/base_args/no_load_optim: null
+          /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 64
           /args/raw_megatron/base_args/num_experts: 256
           /args/raw_megatron/base_args/num_layers: 5
@@ -181,13 +189,14 @@ processes:
               overrides: {model_path: /root/models/GLM-5.2_5layer-NVFP4/}
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
+          /args/start_rollout_id: null
           /args/tis_clip_low: 0.5
           /args/use_miles_router: true
           /args/use_tis: true
     template: main-01
   tests/e2e/megatron/test_glm5_2_744b_a40b_5layer_nvfp4_w4a16/run-0000/all/default/rollout_executor:
     diffs: *id005
-    overrides: &id009
+    overrides: &id010
       set:
         <<:
         - *id004
@@ -197,17 +206,19 @@ processes:
     template: rollout_executor-01
   tests/e2e/megatron/test_glm5_2_744b_a40b_5layer_nvfp4_w4a16/run-0000/all/default/trainer_controller_actor:
     overrides:
+      remove: *id008
       set:
-        <<: *id008
+        <<: *id009
         /args/backend/rank: 0
     template: trainer-megatron-01
   tests/e2e/megatron/test_glm5_2_744b_a40b_5layer_nvfp4_w4a16/run-0000/all/default/worker_manager:
-    overrides: *id009
+    overrides: *id010
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-01:
     set:
       <<: *id007
+      /args/critic_load: null
       /args/log_inference_engine_weight_checksums: false
       /args/requested_load: null
       /args/save_debug_event_data: /tmp/miles-ci/$RUN_UUID/events

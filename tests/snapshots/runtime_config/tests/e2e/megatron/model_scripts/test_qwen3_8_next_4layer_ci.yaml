@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 5
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 5
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/ckpt/qwen3.8-flash-next-4layer_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/ckpt/qwen3.8-flash-next-4layer_torch_dist
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -32,7 +37,6 @@ processes:
           /args/ci_disable_kl_checker: true
           /args/ci_disable_logprobs_checker: true
           /args/config_snapshot_name: tests/e2e/megatron/model_scripts/test_qwen3_8_next_4layer_ci/run-0000
-          /args/critic_load: /root/ckpt/qwen3.8-flash-next-4layer_torch_dist
           /args/custom_model_provider_path:
             config: null
             path: miles_plugins.models.qwen3_8_next.model_provider.get_qwen3_8_next_model_provider
@@ -68,6 +72,7 @@ processes:
               overrides: {model_path: /root/models/Qwen3.8-Flash-Next-4layer}
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
+          /args/start_rollout_id: null
           /args/train_memory_margin_bytes: 3221225472
           /args/update_weight_buffer_size: 1073741824
           /args/use_dynamic_batch_size: false
@@ -78,7 +83,6 @@ processes:
           /args/balance_data: true
           /args/distributed_timeout_minutes: 60
           /args/input_key: prompt
-          /args/load: /root/ckpt/qwen3.8-flash-next-4layer_torch_dist
           /args/num_layers: 4
           /args/rollout_temperature: 0.8
           /args/wandb_project: miles-run_qwen3_8_next
@@ -105,11 +109,12 @@ processes:
           /args/raw_megatron/base_args/eval_global_batch_size: 32
           /args/raw_megatron/base_args/expert_model_parallel_size: 4
           /args/raw_megatron/base_args/ffn_hidden_size: 640
+          /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 32
           /args/raw_megatron/base_args/hidden_size: 2560
           /args/raw_megatron/base_args/kv_channels: 256
           /args/raw_megatron/base_args/layernorm_zero_centered_gamma: true
-          /args/raw_megatron/base_args/load: /root/ckpt/qwen3.8-flash-next-4layer_torch_dist
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/moe_ffn_hidden_size: 640
           /args/raw_megatron/base_args/moe_grouped_gemm: true
           /args/raw_megatron/base_args/moe_layer_freq: [1, 1, 1, 1]
@@ -118,6 +123,8 @@ processes:
           /args/raw_megatron/base_args/moe_router_topk: 10
           /args/raw_megatron/base_args/moe_shared_expert_gate: true
           /args/raw_megatron/base_args/moe_shared_expert_intermediate_size: 640
+          /args/raw_megatron/base_args/no_load_optim: null
+          /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 24
           /args/raw_megatron/base_args/num_experts: 512
           /args/raw_megatron/base_args/num_layers: 4
@@ -162,6 +169,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id003
       /args/backend/_is_global_batch_size_explicitly_specified: false
@@ -174,7 +182,6 @@ shared_overrides:
       /args/backend/ffn_hidden_size: 640
       /args/backend/kv_channels: 256
       /args/backend/layernorm_zero_centered_gamma: true
-      /args/backend/load: /root/ckpt/qwen3.8-flash-next-4layer_torch_dist
       /args/backend/moe_ffn_hidden_size: 640
       /args/backend/moe_grouped_gemm: true
       /args/backend/moe_layer_freq: [1, 1, 1, 1]
@@ -200,6 +207,7 @@ shared_overrides:
       /args/backend/vocab_size: 248320
       /args/backend/wandb_project: miles-run_qwen3_8_next
       /args/backend/world_size: 8
+      /args/critic_load: null
       /args/init_expected_num_cells/default: 2
       /args/log_probs_max_tokens_per_gpu: null
       /args/use_kl_loss: false

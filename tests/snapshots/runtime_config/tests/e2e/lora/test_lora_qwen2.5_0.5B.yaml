@@ -4,6 +4,11 @@ processes:
       checkpoint_load-0000:
         set:
           <<: &id001 {/args/backend/lr_decay_iters: 6, /args/backend/train_iters: 6}
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: false
+          /args/backend/load: /root/models/Qwen2.5-0.5B-Instruct/
+          /args/backend/no_load_optim: null
+          /args/backend/no_load_rng: null
           /load: /root/models/Qwen2.5-0.5B-Instruct/
           /local_checkpoint_manager: false
       train_first_step-0000: {set: {<<: *id001, /role: actor}}
@@ -44,12 +49,11 @@ processes:
           /args/rm_type: math
           /args/save_debug_event_data: /root/checkpoints/lora-qwen2.5-0.5B-ci/events
           /args/sglang/base_args/mem_fraction_static: 0.4
+          /args/start_rollout_id: null
           /args/target_modules: all-linear
           /args/use_miles_router: true
         - &id005
-          /args/critic_load: /root/models/Qwen2.5-0.5B-Instruct/
           /args/eval_interval: 2
-          /args/load: /root/models/Qwen2.5-0.5B-Instruct/
           /args/num_layers: 24
           /args/rollout_max_response_len: 1024
           /args/save: /root/checkpoints/lora-qwen2.5-0.5B-ci
@@ -80,7 +84,7 @@ processes:
           /args/raw_megatron/base_args/global_batch_size: 32
           /args/raw_megatron/base_args/hidden_size: 896
           /args/raw_megatron/base_args/kv_channels: 64
-          /args/raw_megatron/base_args/load: /root/models/Qwen2.5-0.5B-Instruct/
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/lr: 1.0e-05
           /args/raw_megatron/base_args/no_load_optim: null
           /args/raw_megatron/base_args/no_load_rng: null
@@ -135,6 +139,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/add_qkv_bias: true
@@ -143,12 +148,9 @@ shared_overrides:
       /args/backend/encoder_num_layers: 24
       /args/backend/eval_interval: 2
       /args/backend/ffn_hidden_size: 4864
-      /args/backend/finetune: false
       /args/backend/hidden_size: 896
       /args/backend/kv_channels: 64
       /args/backend/lr: 1.0e-05
-      /args/backend/no_load_optim: null
-      /args/backend/no_load_rng: null
       /args/backend/num_attention_heads: 14
       /args/backend/num_layers: 24
       /args/backend/num_query_groups: 2
@@ -162,6 +164,7 @@ shared_overrides:
       /args/backend/tokenizer_model: /root/models/Qwen2.5-0.5B-Instruct/
       /args/backend/wandb_project: miles-test_lora_qwen2.5_0.5B
       /args/balance_data: false
+      /args/critic_load: null
       /args/input_key: messages
       /args/ref_load: null
       /args/rollout_temperature: 1.0

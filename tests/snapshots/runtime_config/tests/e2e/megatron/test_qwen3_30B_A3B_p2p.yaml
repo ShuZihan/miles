@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 2
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 2
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/Qwen3-30B-A3B_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/Qwen3-30B-A3B_torch_dist
           /local_checkpoint_manager: false
       train_first_step-0000:
@@ -31,7 +36,6 @@ processes:
           /args/global_batch_size: 8
           /args/init_expected_num_cells/default: 1
           /args/input_key: prompt
-          /args/load: /root/Qwen3-30B-A3B_torch_dist
           /args/num_layers: 48
           /args/num_rollout: 2
           /args/rollout_temperature: 0.8
@@ -39,7 +43,6 @@ processes:
         - &id004
           /args/colocate: false
           /args/config_snapshot_name: tests/e2e/megatron/test_qwen3_30B_A3B_p2p/run-0000
-          /args/critic_load: /root/Qwen3-30B-A3B_torch_dist
           /args/hf_checkpoint: /root/models/Qwen3-30B-A3B/
           /args/log_probs_max_tokens_per_gpu: 2048
           /args/max_tokens_per_gpu: 2048
@@ -63,6 +66,7 @@ processes:
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
           /args/skip_actor_forward_only: true
+          /args/start_rollout_id: null
           /args/update_weight_buffer_size: 1073741824
           /args/update_weight_transfer_mode: p2p
     template: inference_controller-01
@@ -86,9 +90,10 @@ processes:
           /args/raw_megatron/base_args/eval_global_batch_size: 8
           /args/raw_megatron/base_args/expert_model_parallel_size: 2
           /args/raw_megatron/base_args/ffn_hidden_size: 6144
+          /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 8
           /args/raw_megatron/base_args/hidden_size: 2048
-          /args/raw_megatron/base_args/load: /root/Qwen3-30B-A3B_torch_dist
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/moe_ffn_hidden_size: 768
           /args/raw_megatron/base_args/moe_grouped_gemm: true
           /args/raw_megatron/base_args/moe_layer_freq: &id007 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -96,6 +101,8 @@ processes:
           /args/raw_megatron/base_args/moe_permute_fusion: true
           /args/raw_megatron/base_args/moe_router_dtype: fp32
           /args/raw_megatron/base_args/moe_router_topk: 8
+          /args/raw_megatron/base_args/no_load_optim: null
+          /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 32
           /args/raw_megatron/base_args/num_experts: 128
           /args/raw_megatron/base_args/num_layers: 48
@@ -140,6 +147,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/context_parallel_size: 2
@@ -151,7 +159,6 @@ shared_overrides:
       /args/backend/ffn_hidden_size: 6144
       /args/backend/global_batch_size: 8
       /args/backend/hidden_size: 2048
-      /args/backend/load: /root/Qwen3-30B-A3B_torch_dist
       /args/backend/moe_ffn_hidden_size: 768
       /args/backend/moe_grouped_gemm: true
       /args/backend/moe_layer_freq: *id007
@@ -172,4 +179,5 @@ shared_overrides:
       /args/backend/use_rotary_position_embeddings: false
       /args/backend/wandb_project: miles-test_qwen3_30B_A3B_p2p
       /args/backend/world_size: 6
+      /args/critic_load: null
       /args/use_kl_loss: false

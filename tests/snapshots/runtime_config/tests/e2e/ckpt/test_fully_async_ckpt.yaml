@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 12
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 12
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/models/Qwen3-4B_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/models/Qwen3-4B_torch_dist
           /local_checkpoint_manager: false
       train_first_step-0000: &id008
@@ -17,13 +22,12 @@ processes:
       set:
         <<:
         - &id007
-          /args/backend/load: /root/models/Qwen3-4B_torch_dist
           /args/backend/save: /root/models/Qwen3-4B_miles
           /args/backend/save_interval: 2
           /args/config_snapshot_name: tests/e2e/ckpt/test_fully_async_ckpt/run-0000
+          /args/critic_load: null
         - &id002
           /args/ci_save_model_hash: true
-          /args/critic_load: /root/models/Qwen3-4B_torch_dist
           /args/critic_save: /root/models/Qwen3-4B_miles_critic
           /args/debug_exit_after_rollout: 4
     ranks: [0, 1, 2, 3]
@@ -40,10 +44,7 @@ processes:
       set:
         <<:
         - *id002
-        - &id004
-          /args/load: /root/models/Qwen3-4B_torch_dist
-          /args/save: /root/models/Qwen3-4B_miles
-          /args/save_interval: 2
+        - &id004 {/args/save: /root/models/Qwen3-4B_miles, /args/save_interval: 2}
     template: inference_controller-01
   tests/e2e/ckpt/test_fully_async_ckpt/run-0000/all/default/main:
     <<: &id010
@@ -59,7 +60,7 @@ processes:
         <<:
         - *id002
         - *id004
-        /args/raw_megatron/base_args/load: /root/models/Qwen3-4B_torch_dist
+        /args/raw_megatron/base_args/load: null
         /args/raw_megatron/base_args/save: /root/models/Qwen3-4B_miles
         /args/raw_megatron/base_args/save_interval: 2
   tests/e2e/ckpt/test_fully_async_ckpt/run-0000/all/default/rollout_executor:
@@ -82,26 +83,23 @@ processes:
       checkpoint_load-0000:
         set:
           <<: *id001
+          /args/backend/ckpt_step: 3
+          /args/backend/finetune: false
+          /args/backend/load: /root/models/Qwen3-4B_miles
+          /args/backend/no_load_optim: null
+          /args/backend/no_load_rng: null
           /load: /root/models/Qwen3-4B_miles
           /local_checkpoint_manager: false
       train_first_step-0000: *id008
     overrides:
       set:
-        <<:
-        - &id013
-          /args/backend/ckpt_step: 3
-          /args/backend/finetune: false
-          /args/backend/load: /root/models/Qwen3-4B_miles
-          /args/backend/low_memory_resume: true
-          /args/backend/no_load_optim: null
-          /args/backend/no_load_rng: null
-        - &id009
+        <<: &id009
           /args/ci_check_model_hash: true
           /args/config_snapshot_name: tests/e2e/ckpt/test_fully_async_ckpt/run-0001
           /args/critic_load: /root/models/Qwen3-4B_miles
           /args/requested_load: /root/models/Qwen3-4B_miles
-          /args/start_rollout_id: null
           /args/wandb_group: $RUN_ID_0004_$CI_COMMIT_NAME_github
+        /args/backend/low_memory_resume: true
     ranks: [0, 1, 2, 3]
     template: trainer-megatron-02
   tests/e2e/ckpt/test_fully_async_ckpt/run-0001/all/default/inference_controller:
@@ -120,11 +118,8 @@ processes:
         - *id009
         - *id011
         /args/raw_megatron/base_args/ckpt_step: 3
-        /args/raw_megatron/base_args/finetune: false
         /args/raw_megatron/base_args/load: /root/models/Qwen3-4B_miles
         /args/raw_megatron/base_args/low_memory_resume: true
-        /args/raw_megatron/base_args/no_load_optim: null
-        /args/raw_megatron/base_args/no_load_rng: null
   tests/e2e/ckpt/test_fully_async_ckpt/run-0001/all/default/rollout_executor:
     diffs: *id005
     overrides: *id012
@@ -132,9 +127,8 @@ processes:
   tests/e2e/ckpt/test_fully_async_ckpt/run-0001/all/default/trainer_controller_actor:
     overrides:
       set:
-        <<:
-        - *id013
-        - *id009
+        <<: *id009
+        /args/backend/low_memory_resume: true
         /args/backend/rank: 0
     template: trainer-megatron-02
   tests/e2e/ckpt/test_fully_async_ckpt/run-0001/all/default/worker_manager:
@@ -144,14 +138,14 @@ shared_overrides:
   inference_controller-01:
     set:
       <<:
-      - &id014
+      - &id013
         /args/balance_data: true
         /args/global_batch_size: 8
         /args/input_key: prompt
         /args/ref_load: /root/models/Qwen3-4B_torch_dist
         /args/rollout_temperature: 0.8
         /args/wandb_project: miles-test_fully_async_ckpt
-      - &id015
+      - &id014
         /args/colocate: false
         /args/eps_clip_high: 0.2
         /args/fully_async: true
@@ -165,7 +159,7 @@ shared_overrides:
         /args/offload_train: false
         /args/pause_generation_mode: in_place
         /args/rollout_batch_size: 4
-        /args/rollout_function_path/config: &id017 {custom_async_data_buffer_path_per_model: null}
+        /args/rollout_function_path/config: &id016 {custom_async_data_buffer_path_per_model: null}
         /args/rollout_function_path/path: miles.rollout.fully_async_rollout.FullyAsyncRolloutFn
         /args/rollout_max_response_len: 256
         /args/rollout_num_gpus_per_engine: 2
@@ -183,20 +177,24 @@ shared_overrides:
             overrides: {model_path: /root/models/Qwen3-4B/}
             worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
           update_weights: true
+        /args/start_rollout_id: null
   main-01:
     set:
       <<:
+      - *id013
       - *id014
-      - *id015
-      - &id016
+      - &id015
         /args/raw_megatron/base_args/disable_grad_buffers_cpu_backup: false
         /args/raw_megatron/base_args/disable_param_buffers_cpu_backup: false
         /args/raw_megatron/base_args/encoder_num_layers: 36
         /args/raw_megatron/base_args/eval_global_batch_size: 8
         /args/raw_megatron/base_args/expert_tensor_parallel_size: 2
         /args/raw_megatron/base_args/ffn_hidden_size: 9728
+        /args/raw_megatron/base_args/finetune: false
         /args/raw_megatron/base_args/global_batch_size: 8
         /args/raw_megatron/base_args/hidden_size: 2560
+        /args/raw_megatron/base_args/no_load_optim: null
+        /args/raw_megatron/base_args/no_load_rng: null
         /args/raw_megatron/base_args/num_attention_heads: 32
         /args/raw_megatron/base_args/num_layers: 36
         /args/raw_megatron/base_args/num_query_groups: 8
@@ -208,19 +206,20 @@ shared_overrides:
         /args/raw_megatron/base_args/untie_embeddings_and_output_weights: false
         /args/raw_megatron/base_args/wandb_project: miles-test_fully_async_ckpt
         /args/raw_megatron/base_args/world_size: 4
-  rollout_executor-01: &id018
+  rollout_executor-01: &id017
     set:
       <<:
+      - *id013
       - *id014
       - *id015
-      - *id016
-      /args/eval_function_path/config: *id017
+      /args/eval_function_path/config: *id016
       /args/eval_function_path/path: miles.rollout.fully_async_rollout.FullyAsyncRolloutFn
       /args/namespaced_radix_cache: true
       /args/over_sampling_batch_size: 4
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
-      <<: *id015
+      <<: *id014
       /args/backend/disable_grad_buffers_cpu_backup: false
       /args/backend/disable_param_buffers_cpu_backup: false
       /args/backend/eval_global_batch_size: 8
@@ -233,4 +232,4 @@ shared_overrides:
       /args/backend/wandb_project: miles-test_fully_async_ckpt
       /args/init_expected_num_cells/default: 2
       /args/use_kl_loss: false
-  worker_manager-01: *id018
+  worker_manager-01: *id017

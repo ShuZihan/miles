@@ -6,20 +6,9 @@
 @@ -184 +184 @@
 -  load: null
 +  load: $FIXTURES/checkpoint
-@@ -520 +520 @@
--      finetune: true
-+      finetune: false
 @@ -673 +673 @@
 -      load: null
 +      load: $FIXTURES/checkpoint
-@@ -868,2 +868,2 @@
--      no_load_optim: true
--      no_load_rng: true
-+      no_load_optim: null
-+      no_load_rng: null
 @@ -1175 +1175 @@
 -  requested_load: null
 +  requested_load: $FIXTURES/checkpoint
-@@ -1830 +1830 @@
--  start_rollout_id: 0
-+  start_rollout_id: null

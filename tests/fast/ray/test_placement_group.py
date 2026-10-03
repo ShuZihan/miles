@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from argparse import Namespace
 from types import SimpleNamespace
@@ -23,12 +24,13 @@ from miles.ray.placement_group import (
     take_over_trainers,
 )
 from miles.ray.rollout.eval_fleet import EvalFleetInfo
-from miles.ray.rollout.inference_controller import UpdatableEngines
+from miles.ray.rollout.inference_controller import InferenceController, UpdatableEngines
 from miles.ray.rollout.server_cell import ServerCellMetadata
 from miles.ray.train.init_request import TrainerControllerInitRequest
 from miles.ray.train_actor import WeightUpdateOutput
 from miles.rollout.session.types import SessionServerInstance
 from miles.utils.args.runtime import AllConfig
+from miles.utils.context_lock import ContextLock
 from miles.utils.init_once import InitState
 from miles.utils.test_utils.fault_injector.models import FaultHookName
 from miles.utils.workers.types import DeployComponent, DeploymentIdentity
@@ -60,6 +62,7 @@ def fake_components():
     events: list[str] = []
 
     controller_handle = MagicMock(name="inference_controller")
+    controller_handle.abort_update_weights = AsyncMock()
     controller_handle.check_weights = AsyncMock()
     controller_handle.offload = AsyncMock()
     controller_handle.is_initialized = AsyncMock(return_value=False)
@@ -91,7 +94,9 @@ def fake_components():
 
     capability = FakeBackendCapability(static_provider=object())
 
-    with patch(
+    trainer_handle = SimpleNamespace(wait_idle=AsyncMock())
+
+    with patch("miles.ray.placement_group.create_trainer_handles", return_value={"actor": trainer_handle}), patch(
         "miles.ray.placement_group.create_inference_controller_handle", lambda *, capability: controller_handle
     ), patch("miles.ray.placement_group.resolve_router_addrs", resolve_router_addrs), patch(
         "miles.ray.placement_group.wait_session_server_ready", fake_wait_session_server_ready
@@ -232,6 +237,7 @@ class TestTakeOverInference:
         assert [name for name, _args, _kwargs in fake_components.controller_handle.mock_calls] == [
             "is_initialized",
             "wait_idle",
+            "abort_update_weights",
             "wait_expected_num_cells",
             "abort_all",
             "get_eval_fleet_info",
@@ -239,6 +245,25 @@ class TestTakeOverInference:
 
         fake_components.controller_handle.init.assert_not_awaited()
         fake_components.controller_handle.abort_all.assert_awaited_once_with()
+
+    async def test_take_over_recovers_the_lock_left_by_a_completed_weight_update(self, fake_components) -> None:
+        """Replacing the orchestrator between weight transfer and completion must not wedge inference."""
+        controller = InferenceController.__new__(InferenceController)
+        controller.args = SimpleNamespace(colocate=False)
+        controller.servers = {}
+        controller.context_lock = ContextLock("InferenceController")
+        await controller.start_update_weights()
+
+        handle = fake_components.controller_handle
+        handle.is_initialized = AsyncMock(return_value=True)
+        handle.wait_idle = AsyncMock()
+        handle.wait_expected_num_cells = AsyncMock()
+        handle.abort_update_weights = controller.abort_update_weights
+        handle.abort_all = controller.abort_all
+
+        await asyncio.wait_for(self._take_over(fake_components), timeout=1)
+        await asyncio.wait_for(controller.prepare_eval(), timeout=1)
+        assert not controller.context_lock.locked
 
     async def test_the_eval_fleet_reaches_the_executor_through_an_rpc_call(self, fake_components):
         """The controller is a worker: its fleet is only knowable by calling it, never by reading it."""
@@ -558,6 +583,7 @@ def _make_trainer_handle(
     handle = MagicMock()
     handle.is_initialized = AsyncMock(return_value=initialized)
     handle.wait_idle = AsyncMock(return_value=None)
+    handle.finalize_pending_checkpoint = AsyncMock(return_value=None)
     handle.init = AsyncMock(return_value=[0])
     handle.load_state = AsyncMock(return_value=[0])
     handle.get_deployment_identity = AsyncMock(return_value=deployment_identity)
@@ -932,5 +958,5 @@ class TestCreateTrainingModel:
         )
 
         assert info.start_rollout_id == 4
-        handle.load_state.assert_awaited_once_with()
+        handle.load_state.assert_awaited_once_with(_INIT_REQUEST)
         handle.init.assert_not_awaited()

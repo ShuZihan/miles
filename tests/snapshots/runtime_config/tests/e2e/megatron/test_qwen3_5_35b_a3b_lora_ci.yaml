@@ -5,6 +5,11 @@ processes:
         checkpoint_load-0000:
           set:
             <<: &id001 {/args/backend/lr_decay_iters: 1, /args/backend/train_iters: 1}
+            /args/backend/ckpt_step: null
+            /args/backend/finetune: false
+            /args/backend/load: /root/models/Qwen3.5-35B-A3B
+            /args/backend/no_load_optim: null
+            /args/backend/no_load_rng: null
             /load: /root/models/Qwen3.5-35B-A3B
             /local_checkpoint_manager: false
         train_first_step-0000: {set: {<<: *id001, /role: actor}}
@@ -78,7 +83,6 @@ shared_overrides:
       <<:
       - &id009
         /args/ci_disable_logprobs_checker: true
-        /args/critic_load: /root/models/Qwen3.5-35B-A3B
         /args/critic_lr: 1.0e-05
         /args/critic_save: /personal/checkpoints/$RUN_ID_0000_critic
         /args/enable_sample_ownership_checker: false
@@ -127,6 +131,7 @@ shared_overrides:
             overrides: {model_path: /root/models/Qwen3.5-35B-A3B}
             worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
           update_weights: true
+        /args/start_rollout_id: null
         /args/target_modules: all-linear
         /args/use_dynamic_batch_size: false
         /args/use_wandb: false
@@ -136,7 +141,6 @@ shared_overrides:
       - &id010
         /args/global_batch_size: 64
         /args/init_expected_num_cells/default: 1
-        /args/load: /root/models/Qwen3.5-35B-A3B
         /args/num_layers: 40
         /args/save: /personal/checkpoints/$RUN_ID_0000
         /args/save_interval: 1
@@ -161,7 +165,7 @@ shared_overrides:
         /args/raw_megatron/base_args/hidden_size: 2048
         /args/raw_megatron/base_args/kv_channels: 256
         /args/raw_megatron/base_args/layernorm_zero_centered_gamma: true
-        /args/raw_megatron/base_args/load: /root/models/Qwen3.5-35B-A3B
+        /args/raw_megatron/base_args/load: null
         /args/raw_megatron/base_args/lr: 1.0e-05
         /args/raw_megatron/base_args/moe_ffn_hidden_size: 512
         /args/raw_megatron/base_args/moe_grouped_gemm: true
@@ -199,6 +203,7 @@ shared_overrides:
       - *id011
       /args/wandb_run_id: null
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id009
       /args/backend/attention_backend/name: auto
@@ -209,13 +214,11 @@ shared_overrides:
       /args/backend/eval_global_batch_size: 64
       /args/backend/expert_model_parallel_size: 8
       /args/backend/ffn_hidden_size: 512
-      /args/backend/finetune: false
       /args/backend/global_batch_size: 64
       /args/backend/gradient_accumulation_fusion: false
       /args/backend/hidden_size: 2048
       /args/backend/kv_channels: 256
       /args/backend/layernorm_zero_centered_gamma: true
-      /args/backend/load: /root/models/Qwen3.5-35B-A3B
       /args/backend/lr: 1.0e-05
       /args/backend/moe_ffn_hidden_size: 512
       /args/backend/moe_grouped_gemm: true
@@ -226,8 +229,6 @@ shared_overrides:
       /args/backend/moe_shared_expert_gate: true
       /args/backend/moe_shared_expert_intermediate_size: 512
       /args/backend/mtp_num_layers: 1
-      /args/backend/no_load_optim: null
-      /args/backend/no_load_rng: null
       /args/backend/num_attention_heads: 16
       /args/backend/num_experts: 256
       /args/backend/num_layers: 40
@@ -245,6 +246,7 @@ shared_overrides:
       /args/backend/vocab_size: 248320
       /args/backend/world_size: 8
       /args/balance_data: false
+      /args/critic_load: null
       /args/input_key: messages
       /args/log_probs_max_tokens_per_gpu: null
       /args/num_rollout: 1

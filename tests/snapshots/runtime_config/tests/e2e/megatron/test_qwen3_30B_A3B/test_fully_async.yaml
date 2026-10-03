@@ -7,6 +7,11 @@ processes:
             /args/backend/lr_decay_iters: 6
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 6
+          /args/backend/ckpt_step: null
+          /args/backend/finetune: true
+          /args/backend/load: /root/Qwen3-30B-A3B_torch_dist
+          /args/backend/no_load_optim: true
+          /args/backend/no_load_rng: true
           /load: /root/Qwen3-30B-A3B_torch_dist
           /local_checkpoint_manager: false
       checkpoint_load-0001: *id001
@@ -31,7 +36,6 @@ processes:
           /args/advantage_estimator: gspo
           /args/colocate: false
           /args/config_snapshot_name: tests/e2e/megatron/test_qwen3_30B_A3B/test_fully_async/run-0000
-          /args/critic_load: /root/Qwen3-30B-A3B_torch_dist
           /args/eps_clip: 0.0004
           /args/eps_clip_high: 0.0004
           /args/eval_max_response_len: 16384
@@ -62,13 +66,13 @@ processes:
               overrides: {model_path: /root/models/Qwen3-30B-A3B}
               worker_type: {$enum: miles.backends.sglang_utils.sglang_api_client.WorkerType, name: REGULAR}
             update_weights: true
+          /args/start_rollout_id: null
           /args/use_routing_replay: true
           /args/use_tis: true
         - &id005
           /args/balance_data: true
           /args/init_expected_num_cells/default: 1
           /args/input_key: prompt
-          /args/load: /root/Qwen3-30B-A3B_torch_dist
           /args/num_layers: 48
           /args/use_kl_loss: true
           /args/wandb_project: miles-test_fully_async
@@ -95,9 +99,10 @@ processes:
           /args/raw_megatron/base_args/exp_avg_sq_dtype/$torch: torch.float16
           /args/raw_megatron/base_args/expert_model_parallel_size: 2
           /args/raw_megatron/base_args/ffn_hidden_size: 6144
+          /args/raw_megatron/base_args/finetune: false
           /args/raw_megatron/base_args/global_batch_size: 32
           /args/raw_megatron/base_args/hidden_size: 2048
-          /args/raw_megatron/base_args/load: /root/Qwen3-30B-A3B_torch_dist
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/main_params_dtype/$torch: torch.float16
           /args/raw_megatron/base_args/moe_ffn_hidden_size: 768
           /args/raw_megatron/base_args/moe_grouped_gemm: true
@@ -106,6 +111,8 @@ processes:
           /args/raw_megatron/base_args/moe_permute_fusion: true
           /args/raw_megatron/base_args/moe_router_dtype: fp32
           /args/raw_megatron/base_args/moe_router_topk: 8
+          /args/raw_megatron/base_args/no_load_optim: null
+          /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 32
           /args/raw_megatron/base_args/num_experts: 128
           /args/raw_megatron/base_args/num_layers: 48
@@ -170,6 +177,7 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/context_parallel_size: 2
@@ -181,7 +189,6 @@ shared_overrides:
       /args/backend/expert_model_parallel_size: 2
       /args/backend/ffn_hidden_size: 6144
       /args/backend/hidden_size: 2048
-      /args/backend/load: /root/Qwen3-30B-A3B_torch_dist
       /args/backend/main_params_dtype/$torch: torch.float16
       /args/backend/moe_ffn_hidden_size: 768
       /args/backend/moe_grouped_gemm: true
@@ -203,5 +210,6 @@ shared_overrides:
       /args/backend/use_rotary_position_embeddings: false
       /args/backend/wandb_project: miles-test_fully_async
       /args/backend/world_size: 6
+      /args/critic_load: null
       /args/rollout_max_response_len: 8192
       /args/rollout_temperature: 1.0

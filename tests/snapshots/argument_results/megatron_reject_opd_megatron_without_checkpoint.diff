@@ -520,7 +520,7 @@
 -      fim_suffix_token: <fim_suffix>
 -      fine_grained_activation_offloading: false
 -      fine_grained_offloading_max_inflight_offloads: null
--      finetune: true
+-      finetune: false
 -      first_last_layers_bf16: false
 -      flash_decode: false
 -      flight_recorder_dump_on_timeout: true
@@ -868,8 +868,8 @@
 -      nccl_all_reduce_for_prefill: false
 -      nccl_communicator_config_path: null
 -      nccl_ub: false
--      no_load_optim: true
--      no_load_rng: true
+-      no_load_optim: null
+-      no_load_rng: null
 -      no_persist_layer_norm: false
 -      no_rope_freq: null
 -      no_save_optim: false
@@ -1830,7 +1830,7 @@
 -  sglang_server_concurrency: 512
 -  skip_actor_forward_only: false
 -  skip_eval_before_train: false
--  start_rollout_id: 0
+-  start_rollout_id: null
 -  starts_inference_engines: true
 -  stream_optimizer_state_moment_dtype: fp32
 -  stream_optimizer_state_to_disk: false

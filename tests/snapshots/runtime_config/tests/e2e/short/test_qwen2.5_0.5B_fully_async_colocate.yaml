@@ -5,10 +5,17 @@ processes:
         set:
           <<:
           - &id001
+            /args/backend/ckpt_step: null
+            /args/backend/load: /root/models/Qwen2.5-0.5B-Instruct/
+            /load: /root/models/Qwen2.5-0.5B-Instruct/
+            /local_checkpoint_manager: false
+          - &id002
             /args/backend/lr_decay_iters: 4
             /args/backend/model_type: {$enum: megatron.core.enums.ModelType, name: encoder_or_decoder}
             /args/backend/train_iters: 4
-          - &id002 {/load: /root/models/Qwen2.5-0.5B-Instruct/, /local_checkpoint_manager: false}
+          /args/backend/finetune: false
+          /args/backend/no_load_optim: null
+          /args/backend/no_load_rng: null
       checkpoint_load-0001:
         set:
           <<:
@@ -19,7 +26,7 @@ processes:
           /args/backend/no_load_rng: true
       train_first_step-0000:
         set:
-          <<: *id001
+          <<: *id002
           /role: actor
     ranks: [0]
     template: trainer-megatron-02
@@ -49,10 +56,9 @@ processes:
           /args/sample_ownership_grace_steps: 3
           /args/sglang/base_args/enable_metrics: true
           /args/sglang/base_args/mem_fraction_static: 0.65
+          /args/start_rollout_id: null
         - &id005
-          /args/critic_load: /root/models/Qwen2.5-0.5B-Instruct/
           /args/init_expected_num_cells/default: 1
-          /args/load: /root/models/Qwen2.5-0.5B-Instruct/
           /args/log_probs_max_tokens_per_gpu: 9216
           /args/max_tokens_per_gpu: 9216
           /args/num_layers: 24
@@ -82,7 +88,7 @@ processes:
           /args/raw_megatron/base_args/global_batch_size: 32
           /args/raw_megatron/base_args/hidden_size: 896
           /args/raw_megatron/base_args/kv_channels: 64
-          /args/raw_megatron/base_args/load: /root/models/Qwen2.5-0.5B-Instruct/
+          /args/raw_megatron/base_args/load: null
           /args/raw_megatron/base_args/no_load_optim: null
           /args/raw_megatron/base_args/no_load_rng: null
           /args/raw_megatron/base_args/num_attention_heads: 14
@@ -129,16 +135,14 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
+    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
     set:
       <<: *id004
       /args/backend/add_qkv_bias: true
       /args/backend/encoder_num_layers: 24
       /args/backend/ffn_hidden_size: 4864
-      /args/backend/finetune: false
       /args/backend/hidden_size: 896
       /args/backend/kv_channels: 64
-      /args/backend/no_load_optim: null
-      /args/backend/no_load_rng: null
       /args/backend/num_attention_heads: 14
       /args/backend/num_layers: 24
       /args/backend/num_query_groups: 2
@@ -151,4 +155,5 @@ shared_overrides:
       /args/backend/wandb_project: miles-test_qwen2.5_0.5B_fully_async_colocate
       /args/backend/world_size: 1
       /args/balance_data: false
+      /args/critic_load: null
       /args/input_key: messages

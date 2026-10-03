@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import types
 from types import SimpleNamespace
@@ -25,6 +26,7 @@ class FakeTorchftProcessGroup:
         self.configure_kwargs: dict | None = None
 
     def configure(self, **kwargs) -> None:
+        self.async_error_handling = os.environ.get("TORCH_NCCL_ASYNC_ERROR_HANDLING")
         self.configure_kwargs = kwargs
         self._replica_id = kwargs["replica_id"]
         self._rank = kwargs["rank"]
@@ -90,6 +92,27 @@ class TestCreateIndepDpGroup:
         assert messages[0].startswith("ft ")
         assert "op=create_pg" in messages[0]
         assert "quorum=7" in messages[0]
+
+    @pytest.mark.parametrize("original_mode", [None, "3"])
+    def test_only_the_cross_cell_nccl_group_delegates_error_handling_to_torchft(
+        self, fake_torchft, monkeypatch: pytest.MonkeyPatch, original_mode: str | None
+    ) -> None:
+        """A lost replica cannot make NCCL kill a survivor, without changing other groups."""
+        if original_mode is None:
+            monkeypatch.delenv("TORCH_NCCL_ASYNC_ERROR_HANDLING", raising=False)
+        else:
+            monkeypatch.setenv("TORCH_NCCL_ASYNC_ERROR_HANDLING", original_mode)
+        info = IndepDPInfo(
+            cell_index=0, num_cells=2, alive_rank=0, alive_size=2, quorum_id=0, alive_cell_indices=[0, 1]
+        )
+
+        groups = indep_dp.create_indep_dp_group(
+            store_addr="tcp://store:1234", indep_dp_info=info, megatron_rank=0, megatron_world_size=2
+        )
+
+        assert groups.group.async_error_handling == "0"
+        assert groups.gloo_group.async_error_handling == original_mode
+        assert os.environ.get("TORCH_NCCL_ASYNC_ERROR_HANDLING") == original_mode
 
 
 class TestReconfigureIndepDpGroup:

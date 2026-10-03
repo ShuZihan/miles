@@ -11,6 +11,7 @@ from tests.fast.fixtures.args_fixtures import parser_defaults
 from tests.fast.fixtures.megatron_config_fixtures import encode_megatron_config
 
 from miles.backends.megatron_utils import megatron_config as megatron_config_module
+from miles.backends.megatron_utils.checkpoint_request import MegatronCheckpointLoad
 from miles.backends.megatron_utils.megatron_config import (
     MODEL_DEFINITION_ARGS,
     PER_POLICY_ARGS,
@@ -635,8 +636,10 @@ class TestPerPolicyCheckpointResolution:
         model_args = _model_args(args, model_id="a")
 
         assert model_args.save == "/ckpt/run/trainers/a-actor"
-        assert model_args.load == "/models/ref"
-        assert (model_args.finetune, model_args.start_rollout_id) == (True, 0)
+        request = MegatronCheckpointLoad.from_args(model_args)
+        assert model_args.load == "/ckpt/run/trainers/a-actor"
+        assert request.load == "/models/ref"
+        assert (request.finetune, request.resume_from_ckpt) == (True, False)
 
     def test_a_policy_with_its_own_tracker_resumes_from_its_own_directory(self, tmp_path):
         """The tracker of a policy lives under its own subdirectory, so the root never looks resumable."""
@@ -665,8 +668,8 @@ class TestPerPolicyCheckpointResolution:
         )
         args = _make_args(path, megatron_to_hf_mode="bridge", save="/ckpt/run", load="/ckpt/run")
 
-        assert _model_args(args, model_id="a").load == "/models/a"
-        assert _model_args(args, model_id="b").load == "/models/b"
+        assert MegatronCheckpointLoad.from_args(_model_args(args, model_id="a")).load == "/models/a"
+        assert MegatronCheckpointLoad.from_args(_model_args(args, model_id="b")).load == "/models/b"
 
 
 class TestPerPolicyDerivedDefaults:

@@ -113,6 +113,25 @@ class TestAssertARunThatHadSavedNothingWasRedoneFromScratch:
         assert redone.frozen_rollout_id == 1
         assert redone.attempts_of_rollout_id == {0: 2, 1: 2, 2: 1, 3: 1, 4: 1, 5: 1}
 
+    def test_startup_events_discarded_before_takeover_do_not_count_as_training(self, tmp_path: Path) -> None:
+        """Startup-only archives do not represent another discarded training attempt."""
+        run = _Run(dump_dir=tmp_path)
+        run.train(0, 1)
+        event_logger_checkpoint.restore(run.megatron_args)
+        logger = EventLogger(
+            log_dir=run.events_dir, file_name="main.jsonl", source=SimpleProcessIdentity(component="main")
+        )
+        logger.log(MetricEvent, {"metrics": {"startup/duration": 1.0}}, print_log=False)
+        event_logger_checkpoint.discard(run.megatron_args)
+        run.train(0, 1, 2, 3)
+        run.save(3)
+        run.train(4, 5)
+
+        redone = run.assert_redone_from_scratch()
+
+        assert len(list(tmp_path.glob(".trash_*"))) == 2
+        assert redone.attempts_of_rollout_id == {0: 2, 1: 2, 2: 1, 3: 1, 4: 1, 5: 1}
+
     def test_a_carried_over_step_fails(self, tmp_path):
         """A save before the freeze leaves a snapshot to restore, and the restored steps are not retrained ones."""
         run = _Run(dump_dir=tmp_path)

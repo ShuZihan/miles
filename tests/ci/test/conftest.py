@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from tests.ci import ci_utils
 
+from miles.utils.audit_utils.config_snapshot.compact import ConfigSnapshotBases
 from miles.utils.audit_utils.config_snapshot.converter import ConfigSnapshotConverter
 from miles.utils.audit_utils.config_snapshot.models import (
     ConfigSnapshotContext,
@@ -11,6 +12,7 @@ from miles.utils.audit_utils.config_snapshot.models import (
     ConfigSnapshotRecord,
 )
 from miles.utils.audit_utils.config_snapshot.runner import ConfigSnapshotTestRunner
+from miles.utils.audit_utils.config_snapshot.serialization import dump_config_snapshot
 from miles.utils.audit_utils.process_identity import SimpleProcessIdentity
 from miles.utils.test_utils.snapshot import SNAPSHOT_RECORD_DIR_ENV_VAR, SNAPSHOT_UPDATE_ENV_VAR, dump_snapshot
 
@@ -20,12 +22,15 @@ class _SnapshotFileCase:
     test_file: Path
     record_root: Path
     golden: Path
+    bases: Path
     record: ConfigSnapshotRecord
 
     def write_golden(self, *, value: str) -> None:
         record = self.record.model_copy(update={"config": {"args": {"value": value}}})
         self.golden.parent.mkdir(parents=True, exist_ok=True)
-        self.golden.write_text(dump_snapshot(ConfigSnapshotConverter.convert([record])))
+        bases = ConfigSnapshotBases(templates={"default": {}})
+        self.bases.write_text(dump_snapshot(bases))
+        self.golden.write_text(dump_config_snapshot(ConfigSnapshotConverter.convert([record]), bases=bases))
 
 
 @pytest.fixture
@@ -77,5 +82,6 @@ def snapshot_file_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Snap
         test_file=relative,
         record_root=record_root,
         golden=ConfigSnapshotTestRunner.golden_path(test=str(relative), repo_root=tmp_path),
+        bases=tmp_path / "tests/snapshots/runtime_config/base.yaml",
         record=record,
     )
