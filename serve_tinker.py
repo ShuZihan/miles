@@ -25,7 +25,13 @@ logger = logging.getLogger(__name__)
 
 async def serve(args, *, disposer: Disposer):
     assert args.multi_lora, "serve_tinker requires --multi-lora-n-adapters > 0"
-    assert args.load == args.hf_checkpoint, "Tinker trainers and engines must load the same frozen HF base"
+    trainer_configs = compute_trainer_configs(args)
+    [actor_config] = [config for config in trainer_configs if config.role == ACTOR_ROLE]
+    trainer_request = TrainerControllerInitRequest.from_args(args, trainer=actor_config)
+    assert trainer_request.checkpoint_load is not None
+    assert (
+        trainer_request.checkpoint_load.load == args.hf_checkpoint
+    ), "Tinker trainers and engines must load the same frozen HF base"
     checkpoint_root = args.tinker_checkpoint_root or (args.save and f"{args.save}/tinker")
     assert checkpoint_root, "set --tinker-checkpoint-root (or --save to derive <save>/tinker)"
     hf_config = load_hf_config(args.hf_checkpoint).get_text_config()
@@ -49,12 +55,10 @@ async def serve(args, *, disposer: Disposer):
     args.inference_runtime_mut_state.set_(await inference_controller.get_inference_runtime_immut_state())
     init_http_client(args)
 
-    trainer_configs = compute_trainer_configs(args)
-    [actor_config] = [config for config in trainer_configs if config.role == ACTOR_ROLE]
     trainer = create_trainer_handles(args, trainer_configs=trainer_configs, capability=capability)[
         actor_config.trainer_id
     ]
-    await trainer.init(TrainerControllerInitRequest.from_args(args))
+    await trainer.init(trainer_request)
     disposer.add(trainer)
 
     config = GatewayConfig(
