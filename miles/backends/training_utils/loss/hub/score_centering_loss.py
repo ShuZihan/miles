@@ -49,22 +49,43 @@ def _candidate_log_probs(args: Namespace, batch: RolloutBatch, logits: torch.Ten
     if args.log_probs_backend == "fused":
         # a Megatron flag; other backends' logits are exactly the vocabulary
         vocab_size = vocabulary_size(getattr(args, "vocab_size", None), logits.size(-1), parallel.tp.size)
-        # startup rejects sampling-support replay with the fused backend, so every row is full-vocabulary
-        selected, entropy = fused_response_log_probs(
-            logits,
-            args=args,
-            total_lengths=batch["total_lengths"],
-            response_lengths=batch["response_lengths"],
-            max_seq_lens=batch.get("max_seq_lens"),
-            sample_targets=lambda i, sample_rows: _sampled_ids(batch, i, sample_rows),
-            sample_candidates=lambda i, sample_rows: _local_candidate_ids(batch, i, sample_rows, vocab_size),
-            with_entropy=with_entropy,
-        )
+        if support_only:
+            # filtered sampling: score the sampled token and its whole support, normalized over it
+            scores = fused_response_log_probs(
+                logits,
+                args=args,
+                total_lengths=batch["total_lengths"],
+                response_lengths=batch["response_lengths"],
+                max_seq_lens=batch.get("max_seq_lens"),
+                sample_targets=lambda i, sample_rows: _sampled_ids(batch, i, sample_rows),
+                sample_support=lambda i, sample_rows: _local_candidate_ids(batch, i, sample_rows, vocab_size),
+                with_entropy=with_entropy,
+                entropy_over_support=True,
+            )
+            selected = [
+                torch.cat((sampled.unsqueeze(-1), support), dim=-1)
+                for sampled, support in zip(scores.log_probs, scores.support_log_probs, strict=True)
+            ]
+        else:
+            # replay with reference KL is rejected at startup, so without support-only every row is
+            # full-vocabulary
+            assert not replay, "score centering replays the support only without reference KL"
+            scores = fused_response_log_probs(
+                logits,
+                args=args,
+                total_lengths=batch["total_lengths"],
+                response_lengths=batch["response_lengths"],
+                max_seq_lens=batch.get("max_seq_lens"),
+                sample_targets=lambda i, sample_rows: _sampled_ids(batch, i, sample_rows),
+                sample_candidates=lambda i, sample_rows: _local_candidate_ids(batch, i, sample_rows, vocab_size),
+                with_entropy=with_entropy,
+            )
+            selected = scores.log_probs
         result["selected"] = selected
         if args.use_kl_loss:
             result["kl_log_probs"] = [sample[:, 0] for sample in selected]
         if with_entropy:
-            result["entropy"] = entropy
+            result["entropy"] = scores.entropy
         _redistribute_allgather_cp(args, batch, logits, result)
         return result
     chunks = _iter_response_chunks(
