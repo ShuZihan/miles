@@ -321,6 +321,14 @@ def _fused_log_probs_and_entropy(
     return res
 
 
+def to_device_without_sync(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
+    """``tensor`` on ``device``; a CPU tensor is copied from pinned memory, so the copy queues behind
+    the model forward instead of waiting for it to finish, as a blocking copy from pageable memory does."""
+    if tensor.device.type != "cpu" or device.type != "cuda":  # the op rejects non-CUDA logits itself
+        return tensor.to(device)
+    return tensor.pin_memory().to(device, non_blocking=True)
+
+
 def fused_response_log_probs(
     logits: torch.Tensor,
     *,
@@ -348,12 +356,10 @@ def fused_response_log_probs(
     row_ranges, targets = [], []
     for i, sample_rows in enumerate(layout):
         row_ranges.extend(sample_rows.row_ranges)
-        targets.append(sample_targets(i, sample_rows).to(device))
-    # built on the CPU and copied once: one arange kernel per run would be hundreds of tiny launches;
-    # from pinned memory the copy queues behind the model forward instead of waiting for it to finish
+        targets.append(to_device_without_sync(sample_targets(i, sample_rows), device))
+    # built on the CPU and copied once: one arange kernel per run would be hundreds of tiny launches
     rows = torch.cat([torch.arange(row_start, row_end) for row_start, row_end in row_ranges])
-    if device.type == "cuda":  # the op rejects other devices with a clear error
-        rows = rows.pin_memory().to(device, non_blocking=True)
+    rows = to_device_without_sync(rows, device)
     log_probs, entropy = fused_log_probs_and_entropy(
         flat_logits,
         rows,

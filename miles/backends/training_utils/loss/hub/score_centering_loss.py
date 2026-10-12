@@ -11,7 +11,11 @@ from miles.backends.training_utils.data.context_parallel import (
     get_local_response_loss_masks,
     slice_log_prob_with_cp,
 )
-from miles.backends.training_utils.loss.hub.logit_processors import _iter_response_chunks, fused_response_log_probs
+from miles.backends.training_utils.loss.hub.logit_processors import (
+    _iter_response_chunks,
+    fused_response_log_probs,
+    to_device_without_sync,
+)
 from miles.backends.training_utils.loss.hub.math_utils import compute_approx_kl
 from miles.backends.training_utils.loss.hub.score_centering import (
     ScoreCenteringInputs,
@@ -122,7 +126,7 @@ def _sampled_and_candidate_ids(
     # the fused op would score an id past the vocabulary as a plausible wrong value, not fail
     if ((candidates < -1) | (candidates >= vocab_size)).any():
         raise ValueError("Score-centering token ID is outside the model vocabulary")
-    return torch.cat((sampled.unsqueeze(-1), candidates.to(sampled.device)), dim=-1)
+    return torch.cat((sampled.unsqueeze(-1), to_device_without_sync(candidates, sampled.device)), dim=-1)
 
 
 def _redistribute_allgather_cp(args: Namespace, batch: RolloutBatch, logits: torch.Tensor, result: dict) -> None:
