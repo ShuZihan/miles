@@ -284,5 +284,5 @@ def test_local_support_ids_pads_each_selected_row_with_minus_one():
     """The fused backend reads a rank's supports as ``[R, S]`` ids: each selected response position's
     support in order, padded with -1 to the widest one."""
     mask = RolloutSamplingMask.from_mask_list([[4, 1], [7], [2, 9, 3], [5, 6]])
-    ids = local_support_ids(mask, [3, 0, 2], torch.device("cpu"))
+    ids = local_support_ids(mask, [3, 0, 2])
     assert ids.tolist() == [[5, 6, -1], [4, 1, -1], [2, 9, 3]]

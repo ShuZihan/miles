@@ -313,7 +313,7 @@ def _fused_log_probs_and_entropy(
     sample_support = None
     if rollout_sampling_mask is not None:
         sample_support = lambda i, sample_rows: local_support_ids(  # noqa: E731
-            rollout_sampling_mask[i], sample_rows.response_indices(), logits.device
+            rollout_sampling_mask[i], sample_rows.response_indices()
         )
     scores = fused_response_log_probs(
         logits,
