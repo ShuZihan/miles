@@ -189,6 +189,11 @@ def loss_function(
     else:
         loss, log = func(args, batch, logits, sum_of_sample_mean)
 
+    # the loss hub keeps a rank with no response rows in the graph; a custom loss may not, and then
+    # that rank skips the model backward and the other CP ranks hang in its collectives
+    if args.loss_type == "custom_loss" and parallel_state.cp.size > 1 and args.allgather_cp:
+        loss = loss + 0 * logits.sum(dtype=torch.float32)  # fp32: an fp16 sum can overflow, and 0 * inf is nan
+
     # Here we need to divide by cp_size because to cancel the multiply in Megatron.
     if num_rollouts is not None:
         global_batch_size = num_rollouts
