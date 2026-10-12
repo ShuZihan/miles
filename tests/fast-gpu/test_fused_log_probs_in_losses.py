@@ -220,6 +220,77 @@ def test_score_centering_candidates_match_the_torch_backend(nccl_world, dtype):
     torch.testing.assert_close(grad.float(), reference_grad.float(), **grad_tol)
 
 
+def _score_centering_batch(prompt_lens, response_lens, vocab_size, n_candidates, seed):
+    gen = torch.Generator(device="cuda").manual_seed(seed)
+    total_lens = [p + r for p, r in zip(prompt_lens, response_lens, strict=True)]
+    tokens = [torch.randint(0, vocab_size, (total,), device="cuda", generator=gen) for total in total_lens]
+    candidates = []
+    for sample_tokens, response in zip(tokens, response_lens, strict=True):
+        ids = torch.randint(0, vocab_size, (response, n_candidates), device="cuda", generator=gen)
+        ids[:, 0] = sample_tokens[-response:]  # the sampled token is usually among the candidates
+        ids[::2, -2:] = -1
+        candidates.append(ids.cpu())
+    return {
+        "unconcat_tokens": tokens,
+        "total_lengths": total_lens,
+        "response_lengths": response_lens,
+        "rollout_topk_token_ids": candidates,
+    }
+
+
+def _score_centering_args(backend, vocab_size):
+    return make_args(
+        loss_type="score_centering",
+        true_on_policy_mode=False,
+        log_probs_backend=backend,
+        rollout_temperature=0.8,
+        vocab_size=vocab_size,
+        use_kl_loss=True,
+        entropy_coef=0.01,
+        observe_training_entropy=False,
+        use_sampling_support_replay=False,
+        recompute_loss_function=False,
+    )
+
+
+@pytest.mark.parametrize("cp_rank", [0, 1])
+def test_score_centering_zigzag_cp2_matches_the_torch_backend(nccl_world, cp_rank):
+    """Zigzag CP2 with the layout where rank 1 scores no response row: the fused backend's K
+    targets per row must land on the same rows, and an empty rank must still run."""
+    set_parallel_state(dataclasses.replace(make_parallel_state(), cp=GroupInfo(rank=cp_rank, size=2, group=None)))
+    vocab_size = _LOSS_VOCAB - 96
+    batch = _score_centering_batch(_ZIGZAG_PROMPT_LENS, _ZIGZAG_RESPONSE_LENS, vocab_size, 8, seed=40 + cp_rank)
+    local_rows = sum(2 * -(-total // 4) for total in batch["total_lengths"])
+    logits = torch.randn(1, local_rows, _LOSS_VOCAB, device="cuda", generator=torch.Generator("cuda").manual_seed(41))
+
+    outputs = {}
+    for backend in ("torch", "fused"):
+        leaf = (logits * 4).requires_grad_(True)
+        result = score_centering_loss._candidate_log_probs(_score_centering_args(backend, vocab_size), batch, leaf * 1)
+        selected, entropy = torch.cat(result["selected"]), torch.cat(result["entropy"])
+        weights = torch.linspace(-1, 1, selected.numel(), device="cuda").view(selected.shape)
+        ((selected * weights).sum() + 0.1 * entropy.sum()).backward()
+        outputs[backend] = ([s.size(0) for s in result["selected"]], selected.detach(), entropy.detach(), leaf.grad)
+
+    (torch_sizes, *torch_outputs), (fused_sizes, *fused_outputs) = outputs["torch"], outputs["fused"]
+    assert fused_sizes == torch_sizes
+    if cp_rank == 1:
+        assert fused_sizes[0] == 0
+    for fused, reference in zip(fused_outputs, torch_outputs, strict=True):
+        torch.testing.assert_close(fused, reference, rtol=1e-5, atol=5e-5)
+
+
+def test_score_centering_rejects_a_candidate_outside_the_vocabulary(nccl_world):
+    """The torch backend rejects such an id; the fused op would score it as a plausible wrong value."""
+    make_parallel_state()
+    vocab_size = _LOSS_VOCAB - 96
+    batch = _score_centering_batch([5, 9], [7, 4], vocab_size, 8, seed=42)
+    batch["rollout_topk_token_ids"][1][2, 3] = vocab_size  # first id of Megatron's vocab padding
+    logits = torch.randn(1, sum(batch["total_lengths"]), _LOSS_VOCAB, device="cuda")
+    with pytest.raises(ValueError, match="outside the model vocabulary"):
+        score_centering_loss._candidate_log_probs(_score_centering_args("fused", vocab_size), batch, logits)
+
+
 # (prompt_lens, response_lens): totals divide by 2 * cp. In the second case rank 0's contiguous
 # half holds no response logits.
 _ALLGATHER_CP_CASES = [([16, 2], [8, 6]), ([40], [24])]

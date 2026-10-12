@@ -47,6 +47,8 @@ def _candidate_log_probs(args: Namespace, batch: RolloutBatch, logits: torch.Ten
     if with_entropy:
         result["entropy"] = []
     if args.log_probs_backend == "fused":
+        # a Megatron flag; other backends' logits are exactly the vocabulary
+        vocab_size = getattr(args, "vocab_size", None) or logits.size(-1) * parallel.tp.size
         # startup rejects sampling-support replay with the fused backend, so every row is full-vocabulary
         selected, entropy = fused_response_log_probs(
             logits,
@@ -54,7 +56,7 @@ def _candidate_log_probs(args: Namespace, batch: RolloutBatch, logits: torch.Ten
             total_lengths=batch["total_lengths"],
             response_lengths=batch["response_lengths"],
             max_seq_lens=batch.get("max_seq_lens"),
-            sample_targets=lambda i, sample_rows: _sampled_and_candidate_ids(batch, i, sample_rows),
+            sample_targets=lambda i, sample_rows: _sampled_and_candidate_ids(batch, i, sample_rows, vocab_size),
             with_entropy=with_entropy,
         )
         result["selected"] = selected
@@ -108,13 +110,19 @@ def _candidate_log_probs(args: Namespace, batch: RolloutBatch, logits: torch.Ten
     return result
 
 
-def _sampled_and_candidate_ids(batch: RolloutBatch, sample: int, sample_rows: LocalResponseRows) -> torch.Tensor:
+def _sampled_and_candidate_ids(
+    batch: RolloutBatch, sample: int, sample_rows: LocalResponseRows, vocab_size: int
+) -> torch.Tensor:
     """``[R, 1 + K]`` token ids per local row: the sampled token, then the rollout's top-K candidates."""
     total, response = batch["total_lengths"][sample], batch["response_lengths"][sample]
     sampled = sample_rows.tokens(batch["unconcat_tokens"][sample], total - response).long()
     indices = torch.as_tensor(sample_rows.response_indices(), dtype=torch.long)
-    candidates = _candidate_ids(batch, sample, indices).to(sampled.device)
-    return torch.cat((sampled.unsqueeze(-1), candidates), dim=-1)
+    candidates = _candidate_ids(batch, sample, indices)
+    # checked while still on the CPU, as selected_log_probs_and_entropy checks the torch backend's:
+    # the fused op would score an id past the vocabulary as a plausible wrong value, not fail
+    if ((candidates < -1) | (candidates >= vocab_size)).any():
+        raise ValueError("Score-centering token ID is outside the model vocabulary")
+    return torch.cat((sampled.unsqueeze(-1), candidates.to(sampled.device)), dim=-1)
 
 
 def _redistribute_allgather_cp(args: Namespace, batch: RolloutBatch, logits: torch.Tensor, result: dict) -> None:
