@@ -958,6 +958,11 @@ def chunked_gae(
     return advantages, returns
 
 
+def vocabulary_size(vocab_size: int | None, shard_width: int, tp_size: int) -> int:
+    """The true vocabulary size: Megatron's ``--vocab-size`` or, unset, every column of the TP-sharded logits."""
+    return vocab_size if vocab_size is not None else shard_width * tp_size
+
+
 def logit_temperature(temperature: float) -> float:
     """What the logits are divided by: the sampling temperature, or 1 for greedy sampling (temperature 0)."""
     return float(temperature) if temperature > 0 else 1.0

@@ -15,6 +15,7 @@ import torch
 import torch.distributed as dist
 from torch import Tensor
 
+from miles.backends.training_utils.loss.hub.math_utils import vocabulary_size
 from miles.kernels.softmax import token_log_softmax as kernels
 
 
@@ -41,10 +42,7 @@ def fused_log_probs_and_entropy(
     assert logits.dim() == 2 and logits.stride(-1) == 1, f"need [N, V] logits, got {tuple(logits.shape)}"
     assert rows.shape == targets.shape, f"{tuple(rows.shape)} rows vs {tuple(targets.shape)} targets"
     assert temperature > 0, f"temperature {temperature}: pass math_utils.logit_temperature of the sampling one"
-    tp_size = dist.get_world_size(tp_group) if tp_group is not None else 1
-    n_ids = vocab_size if vocab_size is not None else logits.size(1) * tp_size
-    # no shard holds an id past the vocabulary, so it would score a plausible wrong value; checked on device
-    torch._assert_async(((targets >= 0) & (targets < n_ids)).all(), "fused log-prob target outside the vocabulary")
+    _check_ids_in_vocabulary(targets, lowest=0, logits=logits, tp_group=tp_group, vocab_size=vocab_size)
     options = _FusedOptions(
         tp_group=tp_group,
         vocab=_vocab_range(logits, tp_group, vocab_size),
@@ -139,6 +137,17 @@ def _combine_over_tp(shard: kernels.ShardStats, in_shard, tp_group, temperature)
     dist.all_reduce(sums, group=tp_group)
     sum_exp_logit = sums[:, 2] if shard.sum_exp_logit is not None else None
     return kernels.ShardStats(global_logit_max, sums[:, 0], sum_exp_logit, sums[:, 1])
+
+
+def _check_ids_in_vocabulary(ids: Tensor, *, lowest: int, logits: Tensor, tp_group, vocab_size: int | None) -> None:
+    """No shard holds an id past the vocabulary, so it would score a plausible wrong value instead of failing."""
+    if not ids.numel():  # aminmax has no identity
+        return
+    tp_size = dist.get_world_size(tp_group) if tp_group is not None else 1
+    n_ids = vocabulary_size(vocab_size, logits.size(1), tp_size)
+    # the extremes, not a mask the size of ids; asserted on device, as a host check would sync the stream
+    low, high = torch.aminmax(ids)
+    torch._assert_async((low >= lowest) & (high < n_ids), "fused log-prob token id outside the vocabulary")
 
 
 def _vocab_range(logits: Tensor, tp_group: dist.ProcessGroup | None, vocab_size: int | None) -> kernels.VocabRange:
