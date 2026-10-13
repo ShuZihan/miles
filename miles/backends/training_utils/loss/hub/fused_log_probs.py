@@ -40,6 +40,10 @@ def fused_log_probs_and_entropy(
         raise ValueError(f"the fused log-prob op needs CUDA logits, got {logits.device}")
     assert logits.dim() == 2 and logits.stride(-1) == 1, f"need [N, V] logits, got {tuple(logits.shape)}"
     assert rows.shape == targets.shape, f"{tuple(rows.shape)} rows vs {tuple(targets.shape)} targets"
+    tp_size = dist.get_world_size(tp_group) if tp_group is not None else 1
+    n_ids = vocab_size if vocab_size is not None else logits.size(1) * tp_size
+    # no shard holds an id past the vocabulary, so it would score a plausible wrong value; checked on device
+    torch._assert_async(((targets >= 0) & (targets < n_ids)).all(), "fused log-prob target outside the vocabulary")
     options = _FusedOptions(
         tp_group=tp_group,
         vocab=_vocab_range(logits, tp_group, vocab_size),
@@ -111,7 +115,7 @@ def _softmax_stats(logits, rows, targets, options: _FusedOptions) -> kernels.Sof
         temperature=options.temperature,
         with_entropy=options.with_entropy,
     )
-    in_shard = (targets >= options.vocab.start) & (targets < options.vocab.start + options.vocab.n_unpadded)
+    in_shard = options.vocab.holds(targets)
     return _combine_over_tp(shard, in_shard, options.tp_group, options.temperature).as_softmax_stats()
 
 

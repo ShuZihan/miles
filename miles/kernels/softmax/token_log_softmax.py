@@ -61,6 +61,10 @@ class VocabRange:
     start: int
     n_unpadded: int
 
+    def holds(self, ids: torch.Tensor) -> torch.Tensor:
+        """Which token ids are real columns of this shard."""
+        return (ids >= self.start) & (ids < self.start + self.n_unpadded)
+
 
 class ShardStats(NamedTuple):
     """Per selected row, sums over one shard's vocabulary columns, in ``d = (x - logit_max) / T``.

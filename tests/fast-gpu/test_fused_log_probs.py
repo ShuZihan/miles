@@ -9,6 +9,7 @@ register_cuda_ci(
 )
 
 import os
+import subprocess
 
 import pytest
 import torch
@@ -271,6 +272,24 @@ def test_no_rows_still_gives_the_logits_a_gradient():
     log_probs, _ = fused_log_probs_and_entropy(leaf * 1, empty, empty, tp_group=None, inplace_backward=True)
     log_probs.sum().backward()
     assert leaf.grad is not None and (leaf.grad == 0).all()
+
+
+@pytest.mark.parametrize("target", [-1, 4_000], ids=["negative", "past_the_vocabulary"])
+def test_a_target_outside_the_vocabulary_fails(target):
+    """No shard holds such a target, so without the check it would score a plausible -log S. The check
+    is a device-side assert, which leaves the CUDA context unusable, so it runs in its own process."""
+    script = (
+        "import torch\n"
+        "from miles.backends.training_utils.loss.hub.fused_log_probs import fused_log_probs_and_entropy\n"
+        "logits = torch.randn(4, 4096, device='cuda')\n"
+        "rows = torch.arange(4, device='cuda')\n"
+        f"targets = torch.tensor([1, 2, 3, {target}], device='cuda')\n"
+        "fused_log_probs_and_entropy(logits, rows, targets, tp_group=None, vocab_size=3_000)\n"
+        "torch.cuda.synchronize()\n"
+    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=300)
+    assert result.returncode != 0, result.stdout
+    assert "device-side assert" in result.stderr, result.stderr[-2000:]
 
 
 def test_cpu_logits_are_rejected():
