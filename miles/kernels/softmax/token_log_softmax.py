@@ -128,14 +128,17 @@ def _row_stats_kernel(
         in_vocab = cols < n_unpadded_cols
         x = tl.load(row_ptr + cols, mask=in_vocab, other=float("-inf")).to(tl.float32)
         new_max = tl.maximum(run_max, tl.max(x, axis=0))
-        e = tl.exp2((x - new_max) * log2_scale)
-        rescale = tl.exp2((run_max - new_max) * log2_scale)
+        # while every logit so far is -inf, measure from 0: -inf - (-inf) would make the sums NaN
+        ref_max = tl.where(new_max == float("-inf"), 0.0, new_max)
+        e = tl.exp2((x - ref_max) * log2_scale)
+        rescale = tl.exp2((run_max - ref_max) * log2_scale)
         if WITH_ENTROPY:
             # re-measuring the running sums from the new max shifts every earlier d by the same amount
-            shift = tl.where(run_max == float("-inf"), 0.0, (run_max - new_max) * inv_temperature)
-            d = (x - new_max) * inv_temperature
+            shift = tl.where(run_max == float("-inf"), 0.0, (run_max - ref_max) * inv_temperature)
+            d = (x - ref_max) * inv_temperature
+            # a -inf logit has e = 0 and d = -inf; its term is 0, not NaN
             run_sum_exp_logit = (run_sum_exp_logit + shift * run_sum) * rescale + tl.sum(
-                tl.where(in_vocab, e * d, 0.0), axis=0
+                tl.where(e > 0, e * d, 0.0), axis=0
             )
         # Kahan: for a confident token run_sum sits near 1, and later blocks' ~1e-7 sums would round away
         scaled_sum = run_sum * rescale
@@ -153,7 +156,9 @@ def _row_stats_kernel(
     target = tl.load(targets_ptr + pid) - vocab_start
     in_shard = (target >= 0) & (target < n_unpadded_cols)
     target_x = tl.load(row_ptr + target, mask=in_shard, other=0.0).to(tl.float32)
-    tl.store(target_logit_ptr + pid, tl.where(in_shard, (target_x - run_max) * inv_temperature, 0.0))
+    # a shard whose real logits are all -inf has max -inf; its target is then -inf, not NaN
+    target_logit = (target_x - tl.where(run_max == float("-inf"), 0.0, run_max)) * inv_temperature
+    tl.store(target_logit_ptr + pid, tl.where(in_shard, target_logit, 0.0))
 
 
 @triton.jit
@@ -196,7 +201,8 @@ def _logits_grad_kernel(
         dd = tl.where(cols == target, g * tl.load(one_minus_p_ptr + pid_row), -g * p)
     if HAS_GRAD_ENTROPY:
         c = tl.load(grad_entropy_ptr + pid_row)
-        dd = dd - c * p * (d - tl.load(expected_mean_logit_ptr + pid_row))
+        # a -inf logit has p = 0 and d = -inf; its entropy gradient is 0, not NaN
+        dd = dd - tl.where(p > 0, c * p * (d - tl.load(expected_mean_logit_ptr + pid_row)), 0.0)
     grad = dd * inv_temperature
     tl.store(grad_ptr + row * grad_stride_row + cols, grad.to(grad_ptr.dtype.element_ty), mask=in_vocab)
 
