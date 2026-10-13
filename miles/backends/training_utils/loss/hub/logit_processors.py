@@ -328,7 +328,8 @@ def _fused_log_probs_and_entropy(
     # built on the CPU and copied once: one arange kernel per run would be hundreds of tiny launches;
     # from pinned memory the copy queues behind the model forward instead of waiting for it to finish
     rows = torch.cat([torch.arange(row_start, row_end) for row_start, row_end in row_ranges])
-    rows = rows.pin_memory().to(device, non_blocking=True)
+    if device.type == "cuda":  # the op rejects other devices with a clear error
+        rows = rows.pin_memory().to(device, non_blocking=True)
     log_probs, entropy = fused_log_probs_and_entropy(
         flat_logits,
         rows,
