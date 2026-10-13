@@ -958,11 +958,16 @@ def chunked_gae(
     return advantages, returns
 
 
+def logit_temperature(temperature: float) -> float:
+    """What the logits are divided by: the sampling temperature, or 1 for greedy sampling (temperature 0)."""
+    return float(temperature) if temperature > 0 else 1.0
+
+
 def _upcast_chunk_to_fp32(logits_chunk: torch.Tensor, temperature: float) -> torch.Tensor:
     # copy=True: the TP cross-entropy mutates its input. Scaling after the upcast
     # keeps the division in fp32 when the caller hands model-precision logits.
     chunk = logits_chunk.to(torch.float32, copy=True)
-    if temperature > 0 and temperature != 1.0:
+    if logit_temperature(temperature) != 1.0:
         chunk.div_(temperature)
     return chunk
 

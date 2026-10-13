@@ -40,6 +40,7 @@ def fused_log_probs_and_entropy(
         raise ValueError(f"the fused log-prob op needs CUDA logits, got {logits.device}")
     assert logits.dim() == 2 and logits.stride(-1) == 1, f"need [N, V] logits, got {tuple(logits.shape)}"
     assert rows.shape == targets.shape, f"{tuple(rows.shape)} rows vs {tuple(targets.shape)} targets"
+    assert temperature > 0, f"temperature {temperature}: pass math_utils.logit_temperature of the sampling one"
     tp_size = dist.get_world_size(tp_group) if tp_group is not None else 1
     n_ids = vocab_size if vocab_size is not None else logits.size(1) * tp_size
     # no shard holds an id past the vocabulary, so it would score a plausible wrong value; checked on device
@@ -47,7 +48,7 @@ def fused_log_probs_and_entropy(
     options = _FusedOptions(
         tp_group=tp_group,
         vocab=_vocab_range(logits, tp_group, vocab_size),
-        temperature=float(temperature) if temperature > 0 else 1.0,
+        temperature=float(temperature),
         with_entropy=with_entropy,
         entropy_requires_grad=with_entropy and entropy_requires_grad,
         inplace_backward=inplace_backward,
