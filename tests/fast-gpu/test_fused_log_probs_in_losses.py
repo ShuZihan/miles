@@ -281,7 +281,7 @@ def test_score_centering_zigzag_cp2_matches_the_torch_backend(nccl_world, cp_ran
 
 
 def test_score_centering_rejects_a_candidate_outside_the_vocabulary(nccl_world):
-    """The torch backend rejects such an id; the fused op would score it as a plausible wrong value."""
+    """Both backends reject such an id with the same readable error, before any kernel runs."""
     make_parallel_state()
     vocab_size = _LOSS_VOCAB - 96
     batch = _score_centering_batch([5, 9], [7, 4], vocab_size, 8, seed=42)

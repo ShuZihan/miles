@@ -339,9 +339,14 @@ def fused_response_log_probs(
     sample_targets: Callable[[int, LocalResponseRows], torch.Tensor],
     with_entropy: bool,
     entropy_requires_grad: bool = True,
+    sample_candidates: Callable[[int, LocalResponseRows], torch.Tensor] | None = None,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor] | None]:
     """Per sample, the log-probs of ``sample_targets(i, rows)`` (``[R_i]`` or ``[R_i, K]``) and the
-    entropy at this rank's response rows, all samples in one ``fused_log_probs_and_entropy`` call."""
+    entropy at this rank's response rows, all samples in one ``fused_log_probs_and_entropy`` call.
+
+    ``sample_candidates`` gives ``[R_i, K]`` CPU ids scored as more targets after each row's ``[R_i]``
+    target; all samples' candidates reach the GPU in one copy.
+    """
     # imported here: the op needs triton, which not every host that imports the losses has
     from miles.backends.training_utils.loss.hub.fused_log_probs import fused_log_probs_and_entropy
 
@@ -353,17 +358,23 @@ def fused_response_log_probs(
         max_seq_lens=max_seq_lens,
     )
     device = flat_logits.device
-    row_ranges, targets = [], []
+    row_ranges, targets, candidates = [], [], []
     for i, sample_rows in enumerate(layout):
         row_ranges.extend(sample_rows.row_ranges)
         targets.append(to_device_without_sync(sample_targets(i, sample_rows), device))
+        if sample_candidates is not None:
+            candidates.append(sample_candidates(i, sample_rows))
     # built on the CPU and copied once: one arange kernel per run would be hundreds of tiny launches
     rows = torch.cat([torch.arange(row_start, row_end) for row_start, row_end in row_ranges])
     rows = to_device_without_sync(rows, device)
+    all_targets = torch.cat(targets)
+    if sample_candidates is not None:
+        all_candidates = to_device_without_sync(torch.cat(candidates), device)
+        all_targets = torch.cat((all_targets.unsqueeze(-1), all_candidates), dim=-1)
     log_probs, entropy = fused_log_probs_and_entropy(
         flat_logits,
         rows,
-        torch.cat(targets),
+        all_targets,
         tp_group=get_parallel_state().tp.group,
         vocab_size=getattr(args, "vocab_size", None),  # a Megatron flag; other backends' logits are unpadded
         temperature=logit_temperature(args.rollout_temperature),
