@@ -350,10 +350,8 @@ def all_gather_with_cp(
 ) -> torch.Tensor:
     """This rank's zigzag share of a per-response tensor, gathered over the CP group to the full response.
 
-    Each rank scatters its share into zeros and the all-reduce sums the shares. The result needs a
-    gradient exactly when ``tensor`` does, which is the same on every CP rank (log-probs on all of
-    them, data on none), so every rank runs the same backward all-reduce; a rank holding none of
-    the response still stays in the graph through its empty share.
+    Each rank scatters its share into zeros and the all-reduce sums the shares. A rank holding none
+    of the response still stays in the graph through its empty share.
     """
     parallel_state = get_parallel_state()
     if parallel_state.cp.size == 1:
@@ -363,7 +361,9 @@ def all_gather_with_cp(
     )
     positions = torch.cat([torch.arange(start, end, device=tensor.device) for start, end in ranges])
     assert positions.numel() == tensor.size(0), f"{positions.numel()} positions vs {tensor.size(0)} values"
-    full_tensor = tensor.new_zeros((response_length, *tensor.shape[1:])).index_copy(0, positions, tensor)
+    # zeros that need a gradient: every CP rank then runs the backward all-reduce, whatever its input
+    zeros = tensor.new_zeros((response_length, *tensor.shape[1:])).requires_grad_()
+    full_tensor = zeros.index_copy(0, positions, tensor)
     return dist.nn.all_reduce(full_tensor, group=parallel_state.cp.group)
 
 
