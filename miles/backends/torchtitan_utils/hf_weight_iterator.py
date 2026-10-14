@@ -80,8 +80,11 @@ def _hf_weights_on_device(trainer, *, complete_across_pp: bool) -> Iterator[tupl
     mine = sorted(k for k in state if _GROUPED_EXPERTS in k)
     everyone: list = [None] * layout.world
     dist.all_gather_object(everyone, mine)
-    for key in sorted(set().union(*everyone)):
-        yield from layout.stream(sd_adapter.to_hf({key: gather_full_param(state[key])}) if key in state else {})
+    # One layer's experts at a time, all of its tensors together: a checkpoint that fuses
+    # w1 and w3 into one gate_up_proj needs both parts in the same to_hf call.
+    for module in sorted({key.rsplit(".", 1)[0] for key in set().union(*everyone)}):
+        group = {k: gather_full_param(state[k]) for k in mine if k.rsplit(".", 1)[0] == module}
+        yield from layout.stream(sd_adapter.to_hf(group))
 
 
 @dataclass(frozen=True)
