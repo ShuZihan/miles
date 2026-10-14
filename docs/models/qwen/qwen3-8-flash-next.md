@@ -185,10 +185,12 @@ What differs from the Megatron path:
 - **No expert bias.** torchtitan's MoE learns one by default; the model config turns it
   off, as Megatron and SGLang route without one.
 
-On the 4-layer slice, the torchtitan forward pass against SGLang's input log-probs on
-the same sequences differs by a mean |Δlogp| of 0.034. For scale, a bf16-vs-fp32 run of the
-torchtitan model alone differs by 0.019, and deliberately dropping the QSA tail block —
-the subtlest bug tried — moves it to 0.08.
+On the 4-layer slice, scoring one 3000-token sequence (long enough that QSA is truly
+sparse past position 2052) with all three implementations gives a mean |Δlogp| of 0.015
+between torchtitan and Megatron, and 0.041 between either trainer and SGLang, the same in
+the dense and sparse regions. torchtitan is as close to the rollout engine as the
+production Megatron path is; the slice's flat logits (mean log p ≈ −14) are what make
+that gap larger than a full model's.
 
 ## 5. Recipe Configuration
 

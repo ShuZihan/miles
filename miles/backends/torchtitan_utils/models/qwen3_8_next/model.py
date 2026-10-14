@@ -53,11 +53,11 @@ class SigmoidGatedRMSNorm(RMSNormGated):
         pass
 
     def forward(self, x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+        # one fp32 pass and one rounding, like sglang's and Megatron's fused gated-norm kernels
         input_dtype = x.dtype
         x = x.float()
         x = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-        x = (self.weight.float() * x).to(input_dtype)
-        return (x * torch.sigmoid(gate.float())).to(input_dtype)
+        return (self.weight.float() * x * torch.sigmoid(gate.float())).to(input_dtype)
 
 
 class HyperConnection(Module):
