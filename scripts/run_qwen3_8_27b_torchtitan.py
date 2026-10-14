@@ -5,7 +5,7 @@
 Qwen3.8-27B ships the same config.json as Qwen3.5-27B, so torchtitan trains it as its
 own `qwen3_5` / `27B` flavor and loads the HF directory as-is: no torch_dist
 conversion. The rollout recipe matches `run_qwen3_dense.py --model-name Qwen3.8-27B`
--- dapo-math-17k @ 8k response len, AIME-2024 eval every 20 rollouts -- so the
+-- dapo-math-17k @ 8k response len, AIME-2024 eval @ 16k every 20 rollouts -- so the
 torchtitan and Megatron curves can be read against each other on one model.
 
 torchtitan has no CPU optimizer, so the fp32 master weights and Adam state stay on
@@ -100,7 +100,8 @@ def execute(args: ScriptArgs):
             "--eval-interval 20 "
             f"--eval-prompt-data aime {args.data_dir}/aime-2024/aime-2024.jsonl "
             "--n-samples-per-eval-prompt 16 "
-            f"--eval-max-response-len {RESPONSE_LEN} "
+            # the Megatron recipe's eval length; eval runs in SGLang only, so --seq-length does not bound it
+            "--eval-max-response-len 16384 "
             "--eval-top-p 1 "
         )
 

@@ -4,7 +4,6 @@ from contextlib import contextmanager
 
 import torch
 import torch.distributed as dist
-from torchtitan.components import checkpoint as titan_checkpoint
 
 from miles.backends.torchtitan_utils import compat
 from miles.backends.torchtitan_utils.config import build_trainer_config
@@ -24,14 +23,6 @@ from miles.utils.tracking_utils.tracking import init_tracking
 from miles.utils.workers.rpc.common.wire_types import Pickled
 
 logger = logging.getLogger(__name__)
-
-
-def _drop_checkpointer_state_cache(trainer: TitanTrainer) -> None:
-    """torchtitan's checkpointer caches ``model.state_dict()``, detached views that share the
-    parameters' storage. Moving the parameters swaps their ``.data`` but the cache keeps the
-    old copy alive, so without this a sleeping trainer leaves its weights on the GPU. The
-    checkpointer rebuilds the cache the next time it reads the state dict."""
-    trainer.checkpointer.states[titan_checkpoint.MODEL].cached_state_dict.clear()
 
 
 def _steps_per_rollout(args: Namespace) -> int:
@@ -110,7 +101,7 @@ class TorchtitanTrainRayActor(TorchNativeTrainRayActor):
         return self.trainer.step_runner()
 
     def _move_to(self, device: str) -> None:
-        _drop_checkpointer_state_cache(self.trainer)
+        compat.drop_model_state_cache(self.trainer)
         super()._move_to(device)
 
     def _build_ref_runner(self, args: Namespace):
@@ -120,7 +111,7 @@ class TorchtitanTrainRayActor(TorchNativeTrainRayActor):
         ref_trainer = TitanTrainer(ref_config)
         ref_trainer.configure_loss_reduction()
         ref_trainer.checkpointer.load()
-        _drop_checkpointer_state_cache(ref_trainer)
+        compat.drop_model_state_cache(ref_trainer)
         for part in ref_trainer.model_parts:
             part.eval()
             part.requires_grad_(False)

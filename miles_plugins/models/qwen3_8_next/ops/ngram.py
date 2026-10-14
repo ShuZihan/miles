@@ -5,10 +5,14 @@ backends and sglang's rollout agree on which table rows a token reads.
 """
 
 import json
+import os
 import struct
+from dataclasses import dataclass
 
 import torch
 from torch import Tensor
+
+from miles.utils.hf_utils.weight_mapping import get_checkpoint_weight_map
 
 
 def shift_right_ignore_eos(tokens: Tensor, n: int, eos_token_id: int) -> Tensor:
@@ -77,17 +81,6 @@ def build_ngram_contexts_packed(
     return torch.cat(parts, dim=0)
 
 
-_WEIGHT_MAP_CACHE: dict[str, dict] = {}
-
-
-def checkpoint_weight_map(hf_checkpoint: str) -> dict:
-    """The checkpoint's name->file map, parsed once per path per process."""
-    if hf_checkpoint not in _WEIGHT_MAP_CACHE:
-        with open(f"{hf_checkpoint}/model.safetensors.index.json") as f:
-            _WEIGHT_MAP_CACHE[hf_checkpoint] = json.load(f)["weight_map"]
-    return _WEIGHT_MAP_CACHE[hf_checkpoint]
-
-
 def safetensors_slice(path: str, name: str, header_cache: dict) -> tuple[int, int, list[int]]:
     """Byte range and shape of one tensor, from the safetensors header."""
     if path not in header_cache:
@@ -98,3 +91,65 @@ def safetensors_slice(path: str, name: str, header_cache: dict) -> tuple[int, in
     meta = header[name]
     start, end = meta["data_offsets"]
     return base + start, base + end, meta["shape"]
+
+
+_PLE_HASH_TENSORS = ("layer_multipliers", "ngram_heads_vocab_sizes", "ngram_heads_offsets")
+
+
+@dataclass(frozen=True)
+class PLEShard:
+    """Where one ``ngram_embedding.shard_<i>`` lives in the checkpoint."""
+
+    path: str
+    start: int
+    end: int
+    shape: tuple[int, ...]
+
+
+def _ple_prefix(hf_layer_index: int) -> str:
+    return f"model.language_model.layers.{hf_layer_index}.ple.ple_embedding"
+
+
+def ple_table_shards(hf_checkpoint: str, hf_layer_index: int) -> list[PLEShard]:
+    """Every n-gram table shard of a PLE layer, in shard order; the flat table is their row concatenation."""
+    index = get_checkpoint_weight_map(hf_checkpoint)
+    prefix = f"{_ple_prefix(hf_layer_index)}.ngram_embedding.shard_"
+    shard_ids = sorted(int(k[len(prefix) :].split(".")[0]) for k in index if k.startswith(prefix))
+    if not shard_ids or shard_ids != list(range(len(shard_ids))):
+        raise ValueError(f"{hf_checkpoint} has PLE shards {shard_ids[:5]}... for layer {hf_layer_index}, not 0..N-1")
+    header_cache: dict = {}
+    shards = []
+    for shard_id in shard_ids:
+        key = f"{prefix}{shard_id}.weight"
+        path = os.path.join(hf_checkpoint, index[key])
+        start, end, shape = safetensors_slice(path, key, header_cache)
+        shards.append(PLEShard(path=path, start=start, end=end, shape=tuple(shape)))
+    return shards
+
+
+def read_ple_shard_into(shard: PLEShard, dst: Tensor) -> None:
+    """Read one shard's bytes straight into ``dst`` (a CPU tensor of the shard's shape)."""
+    if tuple(dst.shape) != shard.shape:
+        raise ValueError(f"{shard.path}: destination {tuple(dst.shape)} does not match shard {shard.shape}")
+    view = memoryview(dst.view(torch.uint8).reshape(-1).numpy())
+    with open(shard.path, "rb") as f:
+        f.seek(shard.start)
+        read = f.readinto(view)
+    if read != shard.end - shard.start:
+        raise OSError(f"{shard.path} ended after {read} of {shard.end - shard.start} bytes; is the download complete?")
+
+
+def read_ple_hash_tensors(hf_checkpoint: str, hf_layer_index: int) -> dict[str, Tensor]:
+    """The three int64 tensors that parameterise the n-gram hash."""
+    index = get_checkpoint_weight_map(hf_checkpoint)
+    header_cache: dict = {}
+    tensors = {}
+    for name in _PLE_HASH_TENSORS:
+        key = f"{_ple_prefix(hf_layer_index)}.{name}"
+        path = os.path.join(hf_checkpoint, index[key])
+        start, end, shape = safetensors_slice(path, key, header_cache)
+        with open(path, "rb") as f:
+            f.seek(start)
+            raw = f.read(end - start)
+        tensors[name] = torch.frombuffer(bytearray(raw), dtype=torch.int64).reshape(shape).clone()
+    return tensors

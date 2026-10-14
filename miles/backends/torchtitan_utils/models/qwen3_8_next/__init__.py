@@ -10,7 +10,6 @@ from functools import partial
 from torch import nn
 from torchtitan.distributed.activation_checkpoint import ActivationCheckpointingConfig
 from torchtitan.distributed.fsdp import apply_fsdp_to_decoder
-from torchtitan.distributed.pipeline_parallel import pipeline_llm
 from torchtitan.models.common import Embedding, Linear
 from torchtitan.models.common.config_utils import (
     get_attention_config,
@@ -202,7 +201,7 @@ def parallelize_qwen3_8_next(
     ac_config: ActivationCheckpointingConfig | None,
     dump_folder: str,
 ):
-    """FSDP, with routed experts on their own mesh under EP; TP and CP are rejected by the model config."""
+    """FSDP, with routed experts on their own mesh under EP; TP, CP and PP are rejected by the model config."""
     from torchtitan.config import TORCH_DTYPE_MAP
 
     if compile_config.enable and "model" in compile_config.components:
@@ -241,7 +240,8 @@ def model_registry(flavor: str, attn_backend: str = "flex") -> ModelSpec:
         flavor=flavor,
         model=qwen3_8_next_configs[flavor](),
         parallelize_fn=parallelize_qwen3_8_next,
-        pipelining_fn=pipeline_llm,
+        # pipeline parallelism is rejected in Qwen38NextModel.Config.update_from_config
+        pipelining_fn=None,
         post_optimizer_build_fn=None,
         state_dict_adapter=Qwen38NextStateDictAdapter,
     )

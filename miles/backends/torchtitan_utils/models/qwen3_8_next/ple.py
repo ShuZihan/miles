@@ -27,17 +27,19 @@ from torchtitan.protocols.module import Module
 from miles.kernels.embedding.ple_gate_conv import ple_gate_conv
 from miles.kernels.embedding.ple_gather import gather_ple_rows
 from miles_plugins.models.qwen3_8_next.ops.ngram import (
+    PLEShard,
     build_ngram_contexts_packed,
-    checkpoint_weight_map,
     ngram_hash_ids,
-    safetensors_slice,
+    ple_table_shards,
+    read_ple_hash_tensors,
+    read_ple_shard_into,
 )
 
 logger = logging.getLogger(__name__)
 
 _SHM_DIR = "/dev/shm"
+_SHM_PREFIX = "miles-qwen38next-ple-"
 _TABLE_WAIT_SECONDS = 3600
-_HASH_TENSORS = ("layer_multipliers", "ngram_heads_vocab_sizes", "ngram_heads_offsets")
 
 
 class PerLayerEmbedding(Module):
@@ -123,39 +125,19 @@ class PerLayerEmbedding(Module):
         return self._table, self._hash
 
 
-def _ple_prefix(hf_layer_index: int) -> str:
-    return f"model.language_model.layers.{hf_layer_index}.ple.ple_embedding"
-
-
-def read_ple_hash_tensors(hf_checkpoint: str, hf_layer_index: int) -> dict[str, torch.Tensor]:
-    """The three int64 tensors that parameterise the n-gram hash."""
-    index = checkpoint_weight_map(hf_checkpoint)
-    header_cache: dict = {}
-    tensors = {}
-    for name in _HASH_TENSORS:
-        key = f"{_ple_prefix(hf_layer_index)}.{name}"
-        path = os.path.join(hf_checkpoint, index[key])
-        start, end, shape = safetensors_slice(path, key, header_cache)
-        with open(path, "rb") as f:
-            f.seek(start)
-            raw = f.read(end - start)
-        tensors[name] = torch.frombuffer(bytearray(raw), dtype=torch.int64).reshape(shape).clone()
-    return tensors
-
-
 _NODE_TABLES: dict[str, torch.Tensor] = {}
 
 
 def node_shared_ple_table(hf_checkpoint: str, hf_layer_index: int) -> torch.Tensor:
     """The layer's whole table, ``[rows, embed_dim / heads]`` bf16, one host copy per node."""
-    shards = _table_shards(hf_checkpoint, hf_layer_index)
-    rows = sum(shape[0] for _, _, _, shape in shards)
-    dim = shards[0][3][1]
-    path = _shm_path(hf_checkpoint, hf_layer_index, rows, dim)
+    shards = ple_table_shards(hf_checkpoint, hf_layer_index)
+    rows = sum(shard.shape[0] for shard in shards)
+    dim = shards[0].shape[1]
+    path = _shm_path(hf_checkpoint, hf_layer_index, shards)
     if path in _NODE_TABLES:
         return _NODE_TABLES[path]
 
-    _materialize_once(path, shards, nbytes=rows * dim * 2)
+    _materialize_once(path, shards, rows=rows, dim=dim)
     table = torch.from_file(path, shared=True, size=rows * dim, dtype=torch.bfloat16).view(rows, dim)
     status = torch.cuda.cudart().cudaHostRegister(table.data_ptr(), table.numel() * table.element_size(), 0)
     if int(status) != 0:
@@ -168,59 +150,77 @@ def node_shared_ple_table(hf_checkpoint: str, hf_layer_index: int) -> torch.Tens
     return table
 
 
-def _table_shards(hf_checkpoint: str, hf_layer_index: int) -> list[tuple[str, int, int, list[int]]]:
-    """``(file, start, end, shape)`` of every ``ngram_embedding.shard_<i>`` in shard order."""
-    index = checkpoint_weight_map(hf_checkpoint)
-    prefix = f"{_ple_prefix(hf_layer_index)}.ngram_embedding.shard_"
-    shard_ids = sorted(int(k[len(prefix) :].split(".")[0]) for k in index if k.startswith(prefix))
-    if not shard_ids or shard_ids != list(range(len(shard_ids))):
-        raise ValueError(f"{hf_checkpoint} has PLE shards {shard_ids[:5]}... for layer {hf_layer_index}, not 0..N-1")
-    header_cache: dict = {}
-    shards = []
-    for shard_id in shard_ids:
-        key = f"{prefix}{shard_id}.weight"
-        path = os.path.join(hf_checkpoint, index[key])
-        start, end, shape = safetensors_slice(path, key, header_cache)
-        shards.append((path, start, end, shape))
-    return shards
+def _shm_path(hf_checkpoint: str, hf_layer_index: int, shards: list[PLEShard]) -> str:
+    """``<checkpoint+layer>-<shard contents>``: a re-downloaded checkpoint gets a new file, never the old one."""
+    owner = hashlib.sha1(f"{os.path.realpath(hf_checkpoint)}:{hf_layer_index}".encode()).hexdigest()[:12]
+    identity = hashlib.sha1()
+    for shard in shards:
+        stat = os.stat(shard.path)
+        identity.update(f"{os.path.realpath(shard.path)}:{stat.st_size}:{stat.st_mtime_ns}:{shard.start}".encode())
+    return os.path.join(_SHM_DIR, f"{_SHM_PREFIX}{owner}-{identity.hexdigest()[:12]}.bf16")
 
 
-def _shm_path(hf_checkpoint: str, hf_layer_index: int, rows: int, dim: int) -> str:
-    key = f"{os.path.realpath(hf_checkpoint)}:{hf_layer_index}:{rows}:{dim}"
-    return os.path.join(_SHM_DIR, f"miles-qwen38next-ple-{hashlib.sha1(key.encode()).hexdigest()[:16]}.bf16")
-
-
-def _materialize_once(path: str, shards: list, *, nbytes: int) -> None:
-    """Exactly one process on the node writes the file; the rest wait for it to appear."""
+def _materialize_once(path: str, shards: list[PLEShard], *, rows: int, dim: int) -> None:
+    """Exactly one process on the node writes the file; the rest wait for it, or for its writer to fail."""
     if os.path.exists(path):
         return
     lock = f"{path}.lock"
     try:
         os.close(os.open(lock, os.O_CREAT | os.O_EXCL))
     except FileExistsError:
-        deadline = time.monotonic() + _TABLE_WAIT_SECONDS
-        while not os.path.exists(path):
-            if time.monotonic() > deadline:
-                raise TimeoutError(
-                    f"waited {_TABLE_WAIT_SECONDS}s for another rank to write {path}; if no job is writing "
-                    f"it, a crashed one left {lock} behind -- delete it and retry"
-                ) from None
-            time.sleep(1)
+        _wait_for_writer(path, lock)
         return
-
-    free = os.statvfs(_SHM_DIR).f_bavail * os.statvfs(_SHM_DIR).f_frsize
-    if free < nbytes:
+    try:
+        _write_table(path, shards, rows=rows, dim=dim)
+    finally:
         os.remove(lock)
-        raise RuntimeError(f"{_SHM_DIR} has {free / 2**30:.1f} GiB free; the PLE table needs {nbytes / 2**30:.1f} GiB")
+    _remove_superseded_tables(path)
+
+
+def _wait_for_writer(path: str, lock: str) -> None:
+    deadline = time.monotonic() + _TABLE_WAIT_SECONDS
+    while not os.path.exists(path):
+        # the writer renames the table into place before it drops the lock
+        if not os.path.exists(lock):
+            if os.path.exists(path):
+                return
+            raise RuntimeError(f"the rank writing {path} gave up without producing it; its log has the reason")
+        if time.monotonic() > deadline:
+            raise TimeoutError(
+                f"waited {_TABLE_WAIT_SECONDS}s for another rank to write {path}; if no job is writing "
+                f"it, a killed one left {lock} behind -- delete it and retry"
+            )
+        time.sleep(1)
+
+
+def _write_table(path: str, shards: list[PLEShard], *, rows: int, dim: int) -> None:
+    nbytes = rows * dim * 2
+    stat = os.statvfs(os.path.dirname(path))
+    if stat.f_bavail * stat.f_frsize < nbytes:
+        raise RuntimeError(
+            f"{os.path.dirname(path)} has {stat.f_bavail * stat.f_frsize / 2**30:.1f} GiB free; "
+            f"the PLE table needs {nbytes / 2**30:.1f} GiB"
+        )
     tmp = f"{path}.tmp-{os.getpid()}"
-    with open(tmp, "wb") as out:
-        for shard_path, start, end, _ in shards:
-            with open(shard_path, "rb") as f:
-                f.seek(start)
-                remaining = end - start
-                while remaining:
-                    chunk = f.read(min(remaining, 1 << 28))
-                    out.write(chunk)
-                    remaining -= len(chunk)
-    os.replace(tmp, path)
-    os.remove(lock)
+    try:
+        with open(tmp, "wb") as f:
+            f.truncate(nbytes)
+        table = torch.from_file(tmp, shared=True, size=rows * dim, dtype=torch.bfloat16).view(rows, dim)
+        row = 0
+        for shard in shards:
+            read_ple_shard_into(shard, table[row : row + shard.shape[0]])
+            row += shard.shape[0]
+        del table
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+def _remove_superseded_tables(path: str) -> None:
+    """Drop this checkpoint+layer's tables from earlier checkpoint contents; processes that still map one keep it."""
+    owner_prefix = os.path.basename(path).rsplit("-", 1)[0] + "-"
+    for name in os.listdir(_SHM_DIR):
+        if name.startswith(owner_prefix) and name.endswith(".bf16") and os.path.join(_SHM_DIR, name) != path:
+            os.remove(os.path.join(_SHM_DIR, name))

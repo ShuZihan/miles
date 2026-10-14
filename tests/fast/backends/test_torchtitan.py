@@ -1,4 +1,6 @@
 import json
+import os
+import threading
 from argparse import Namespace
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -517,3 +519,84 @@ def test_qwen3_8_flash_next_flavor_exports_exactly_the_checkpoint_shapes(flavor,
 
     reloaded = spec.state_dict_adapter(spec.model, None).from_hf(exported)
     assert set(reloaded) == {name for name, _ in model.named_parameters()}
+
+
+def _fake_ple_checkpoint(path, *, rows_per_shard=3, dim=4, shards=2):
+    from safetensors.torch import save_file
+
+    prefix = "model.language_model.layers.1.ple.ple_embedding.ngram_embedding.shard_"
+    tensors = {
+        f"{prefix}{i}.weight": torch.arange(rows_per_shard * dim, dtype=torch.bfloat16).reshape(rows_per_shard, dim)
+        + i
+        for i in range(shards)
+    }
+    save_file(tensors, str(path / "model.safetensors"))
+    (path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {k: "model.safetensors" for k in tensors}})
+    )
+    return tensors
+
+
+@pytest.fixture
+def ple_module(tmp_path, monkeypatch):
+    pytest.importorskip("torchtitan")
+    pytest.importorskip("triton")
+    from miles.backends.torchtitan_utils.models.qwen3_8_next import ple
+
+    shm = tmp_path / "shm"
+    shm.mkdir()
+    monkeypatch.setattr(ple, "_SHM_DIR", str(shm))
+    ckpt = tmp_path / "ckpt"
+    ckpt.mkdir()
+    return ple, ckpt, shm
+
+
+def test_qwen3_8_next_ple_table_is_written_once_and_superseded_when_the_checkpoint_changes(ple_module):
+    ple, ckpt, shm = ple_module
+    tensors = _fake_ple_checkpoint(ckpt)
+    shards = ple.ple_table_shards(str(ckpt), 1)
+    path = ple._shm_path(str(ckpt), 1, shards)
+    ple._materialize_once(path, shards, rows=6, dim=4)
+    table = torch.from_file(path, shared=False, size=24, dtype=torch.bfloat16).view(6, 4)
+    assert torch.equal(table, torch.cat(list(tensors.values())))
+
+    os.utime(ckpt / "model.safetensors", ns=(1, 1))  # the checkpoint's contents changed in place
+    new_path = ple._shm_path(str(ckpt), 1, ple.ple_table_shards(str(ckpt), 1))
+    assert new_path != path
+    ple._materialize_once(new_path, shards, rows=6, dim=4)
+    assert sorted(os.listdir(shm)) == [os.path.basename(new_path)]
+
+
+def test_qwen3_8_next_ple_waiters_fail_fast_when_the_writer_gives_up(ple_module):
+    ple, _, shm = ple_module
+    path = str(shm / "table.bf16")
+    open(f"{path}.lock", "w").close()
+    # the writer drops its lock without renaming the table into place
+    threading.Timer(0.5, os.remove, args=(f"{path}.lock",)).start()
+    with pytest.raises(RuntimeError, match="gave up"):
+        ple._wait_for_writer(path, f"{path}.lock")
+
+
+def test_qwen3_8_next_ple_truncated_shard_raises_and_leaves_no_temp_file(ple_module):
+    ple, ckpt, shm = ple_module
+    _fake_ple_checkpoint(ckpt)
+    shards = ple.ple_table_shards(str(ckpt), 1)
+    with open(ckpt / "model.safetensors", "r+b") as f:
+        f.truncate(shards[-1].end - 4)  # an interrupted download
+    path = str(shm / "table.bf16")
+    with pytest.raises(OSError, match="download complete"):
+        ple._materialize_once(path, shards, rows=6, dim=4)
+    assert os.listdir(shm) == []
+
+
+def test_qwen3_8_next_rejects_pipeline_parallelism():
+    pytest.importorskip("torchtitan")
+    pytest.importorskip("triton")
+    from torchtitan.config import ParallelismConfig
+
+    from miles.backends.torchtitan_utils.config import resolve_model_spec
+
+    spec = resolve_model_spec(_args(titan_model_name="qwen3_8_next", titan_model_flavor="Flash-Next-4layer"))
+    config = SimpleNamespace(parallelism=ParallelismConfig(pipeline_parallel_degree=2), hf_assets_path=None)
+    with pytest.raises(NotImplementedError, match="pipeline parallelism"):
+        spec.model.update_from_config(config=config)

@@ -58,6 +58,7 @@ _RECIPES = {
     "Qwen3.8-Flash-Next-4layer": _Recipe("CharyZeng/Qwen3.8-Flash-Next-4layer", "Flash-Next-4layer", 8, 4),
 }
 
+NUM_EXPERTS = 512
 RESPONSE_LEN = 4096
 # Rotary tables are sized from this, so it has to cover the longest prompt plus the response.
 SEQ_LEN = RESPONSE_LEN + 2048
@@ -86,6 +87,9 @@ class ScriptArgs(U.ExecuteTrainConfig):
     def __post_init__(self):
         if self.num_gpus < self.recipe.min_gpus:
             raise ValueError(f"{self.model_name} needs at least {self.recipe.min_gpus} GPUs, got {self.num_gpus}")
+        # expert parallelism spans every trainer GPU, so each must hold a whole number of experts
+        if NUM_EXPERTS % self.num_gpus:
+            raise ValueError(f"{NUM_EXPERTS} experts do not split evenly over {self.num_gpus} GPUs")
 
 
 def prepare(args: ScriptArgs):

@@ -15,8 +15,9 @@ against sglang:
 - **PLE.** One layer adds a per-layer n-gram embedding to the widened residual before
   its attention read; see ``ple.py``.
 
-Sequence, tensor and context parallelism are rejected: the PLE conv, the QSA indexer
-and the hyper-connection streams all assume each rank holds whole sequences.
+Tensor, context and pipeline parallelism are rejected: the PLE conv, the QSA indexer
+and the hyper-connection streams assume each rank holds whole sequences, and the
+pipeline path has never been run.
 """
 
 from dataclasses import dataclass
@@ -261,6 +262,12 @@ class Qwen38NextModel(Decoder):
                         f"Qwen3.8-Next does not support {name} parallelism under torchtitan: the PLE conv, "
                         "the QSA indexer and the hyper-connection streams need every token of a sequence"
                     )
+            if parallelism.pipeline_parallel_degree > 1:
+                raise NotImplementedError(
+                    "Qwen3.8-Next does not support pipeline parallelism under torchtitan: stages would exchange "
+                    "the hyper-connection-wide residual, and the padding miles adds to fix PP shapes would reach "
+                    "the QSA indexer and the PLE conv as an extra document; neither path has been run"
+                )
             for layer in self.layers:
                 if layer.ple is not None:
                     layer.ple.hf_checkpoint = config.hf_assets_path

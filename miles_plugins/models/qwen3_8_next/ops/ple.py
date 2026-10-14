@@ -16,7 +16,12 @@ from torch import Tensor
 
 from miles.kernels.embedding.ple_gate_conv import ple_gate_conv
 from miles.kernels.embedding.ple_gather import gather_ple_rows
-from miles_plugins.models.qwen3_8_next.ops.ngram import checkpoint_weight_map, ngram_hash_ids, safetensors_slice
+from miles_plugins.models.qwen3_8_next.ops.ngram import (
+    ngram_hash_ids,
+    ple_table_shards,
+    read_ple_hash_tensors,
+    read_ple_shard_into,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +84,7 @@ class Qwen38NextFrozenNGramEmbedding(MegatronModule):
                     "nor qwen3_8_next_hf_checkpoint is set on the config; deriving it "
                     "from ngram_vocab_size_base drifts 12 rows/shard."
                 )
-            name = f"model.language_model.layers.{layer_number - 1}.ple.ple_embedding.ngram_embedding.shard_0.weight"
-            index = checkpoint_weight_map(hf)
-            _, _, shape = safetensors_slice(f"{hf}/{index[name]}", name, {})
-            self.rows_per_shard = int(shape[0])
+            self.rows_per_shard = int(ple_table_shards(hf, self.hf_layer_index)[0].shape[0])
         self.row_start = self.shard_ids[0] * self.rows_per_shard
         self.row_end = (self.shard_ids[-1] + 1) * self.rows_per_shard
 
@@ -104,35 +106,16 @@ class Qwen38NextFrozenNGramEmbedding(MegatronModule):
 
     def load_metadata_from_hf(self, hf_checkpoint: str) -> None:
         """Load the three integer tensors that parameterise the hash."""
-        index = checkpoint_weight_map(hf_checkpoint)
-        prefix = f"model.language_model.layers.{self.hf_layer_index}.ple.ple_embedding"
-        cache: dict = {}
-        for buf_name in ("layer_multipliers", "ngram_heads_vocab_sizes", "ngram_heads_offsets"):
-            name = f"{prefix}.{buf_name}"
-            path = f"{hf_checkpoint}/{index[name]}"
-            start, end, shape = safetensors_slice(path, name, cache)
-            with open(path, "rb") as f:
-                f.seek(start)
-                raw = f.read(end - start)
-            vals = torch.frombuffer(bytearray(raw), dtype=torch.int64).clone()
-            getattr(self, buf_name).copy_(vals.reshape(shape))
+        for name, tensor in read_ple_hash_tensors(hf_checkpoint, self.hf_layer_index).items():
+            getattr(self, name).copy_(tensor)
 
     def load_from_hf(self, hf_checkpoint: str) -> None:
         """Fill the table from the HF safetensors."""
-        index = checkpoint_weight_map(hf_checkpoint)
-        prefix = f"model.language_model.layers.{self.hf_layer_index}.ple.ple_embedding"
-        cache: dict = {}
+        shards = ple_table_shards(hf_checkpoint, self.hf_layer_index)
         for i, shard_id in enumerate(self.shard_ids):
-            name = f"{prefix}.ngram_embedding.shard_{shard_id}.weight"
-            path = f"{hf_checkpoint}/{index[name]}"
-            start, end, shape = safetensors_slice(path, name, cache)
             rows = i * self.rows_per_shard
-            dst = self.table[rows : rows + shape[0]]
-            assert tuple(dst.shape) == tuple(shape), f"{name}: {tuple(dst.shape)} vs {shape}"
-            with open(path, "rb") as f:
-                f.seek(start)
-                mv = memoryview(dst.view(torch.uint8).reshape(-1).numpy())  # type: ignore[arg-type]
-                f.readinto(mv)
+            shard = shards[shard_id]
+            read_ple_shard_into(shard, self.table[rows : rows + shard.shape[0]])
 
         self._loaded = True
 
