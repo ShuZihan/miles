@@ -10,9 +10,6 @@ pytest.importorskip("megatron.core")
 from safetensors.torch import save_file  # noqa: E402
 from tests.fast.launch_scripts.model_args_harness import expand_model_args  # noqa: E402
 
-from miles.backends.training_utils.weight_update.hf_weight_iterator.engine_resident import (  # noqa: E402
-    is_engine_resident,
-)
 from miles_plugins.models.step5.checkpoint_config import check_matches_checkpoint  # noqa: E402
 from miles_plugins.models.step5.layers import is_full_attention_layer, zero_centered_rms_norm  # noqa: E402
 from miles_plugins.models.step5.qkv_layout import fuse_qkv_and_gate, split_qkv_and_gate  # noqa: E402
@@ -419,11 +416,9 @@ def test_weight_sync_splits_the_qkv_and_gate_rows_the_bridge_fused():
         ("ssmax_s", "ssmax_s"),
     ],
 )
-def test_the_frozen_indexer_exports_under_its_checkpoint_names_and_stays_out_of_weight_sync(name, checkpoint_name):
+def test_the_frozen_indexer_syncs_under_its_checkpoint_names(name, checkpoint_name):
     hf_names = _sync_names(f"module.module.decoder.layers.3.self_attention.indexer.{name}", torch.zeros(4, 4))
     assert hf_names == [f"model.layers.3.self_attn.{checkpoint_name}"]
-    # SGLang keeps the copy it loaded, so weight sync leaves these out
-    assert is_engine_resident("step5", hf_names[0])
 
 
 def test_fp8_sync_leaves_modules_the_checkpoint_keeps_in_bf16():

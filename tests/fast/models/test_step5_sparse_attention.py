@@ -21,9 +21,6 @@ from megatron.core.transformer.transformer_config import TransformerConfig  # no
 from tests.fast.launch_scripts.model_args_harness import expand_model_args  # noqa: E402
 
 from miles.backends.megatron_utils.megatron_to_hf.step5 import convert_step5_to_hf  # noqa: E402
-from miles.backends.training_utils.weight_update.hf_weight_iterator.engine_resident import (  # noqa: E402
-    is_engine_resident,
-)
 from miles_plugins.models.step5.indexer import CHECKPOINT_NAMES, FP32_PARAMS  # noqa: E402
 from miles_plugins.models.step5.layers import (  # noqa: E402
     FULL_ATTENTION_ROPE,
@@ -192,7 +189,7 @@ _CHECKPOINT_FULL_ATTENTION = {
 }
 
 
-def test_full_attention_exports_every_checkpoint_tensor_and_syncs_the_trained_ones(model_parallel):
+def test_full_attention_exports_every_checkpoint_tensor(model_parallel):
     attention = _build_attention(Step5SparseAttention, Step5SparseCoreAttention, layer_number=4)
 
     exported = {}
@@ -201,9 +198,6 @@ def test_full_attention_exports_every_checkpoint_tensor_and_syncs_the_trained_on
         exported |= dict(convert_step5_to_hf(_SyncArgs(), megatron_name, param))
     prefix = "model.layers.3.self_attn."
     assert {name.removeprefix(prefix): tensor.dtype for name, tensor in exported.items()} == _CHECKPOINT_FULL_ATTENTION
-    # SGLang keeps the indexer it loaded, so weight sync sends only what trains
-    synced = {name.removeprefix(prefix) for name in exported if not is_engine_resident("step5", name)}
-    assert synced == {name for name in _CHECKPOINT_FULL_ATTENTION if not name.startswith(("sparse_indexer_", "ssmax"))}
 
 
 class _DenseCoreAttentionStub(torch.nn.Module):

@@ -1,7 +1,7 @@
 """Map Step5 Megatron weights to HF names for export and SGLang weight updates.
 
 Routed experts use per-expert names; gathered QKV/gate blocks are split by TP rank.
-Exports include the frozen indexer, while weight sync keeps SGLang's resident copy.
+The frozen indexer is exported and synced like any other weight.
 """
 
 import re

@@ -882,8 +882,7 @@ class MegatronTrainRayActor(TrainRayActor):
         Uses the direct megatron->HF converters (the weight updater's machinery), so
         export coverage matches weight-sync coverage. Unlike the periodic --save-hf
         path inside save_model, failures propagate to the caller so an eval snapshot
-        that failed to export can be skipped loudly. Weights the engines keep from their own
-        load (engine_resident.py) are left out of weight sync but still exported.
+        that failed to export can be skipped loudly.
         """
         self._heartbeat.bump()
         assert self.snapshot_publisher is not None, "HF export requires a snapshot publisher"
