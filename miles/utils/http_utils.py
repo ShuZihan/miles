@@ -11,8 +11,6 @@ import time
 
 import httpx
 
-from miles.utils.logging_utils import configure_logger_raw
-
 logger = logging.getLogger(__name__)
 
 MILES_HOST_IP_ENV = "MILES_HOST_IP"
@@ -138,6 +136,8 @@ def router_worker_base_urls(urls: list[str]) -> list[str]:
 
 
 def run_router(args):
+    from miles.utils.logging_utils import configure_logger_raw
+
     # Spawned as a fresh interpreter, so it inherits no logging config.
     configure_logger_raw("router")
     try:
