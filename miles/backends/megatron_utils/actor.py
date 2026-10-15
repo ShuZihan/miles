@@ -519,7 +519,8 @@ class MegatronTrainRayActor(TrainRayActor):
     def _weight_sync_reads_tms_backup(self) -> bool:
         """Under colocated LoRA the frozen base already has a memory-saver host backup; a
         pinned "actor" copy of it would duplicate the whole base per rank. Model switching
-        still needs the real backups, and a disk offload target leaves no host backup to read."""
+        still needs the real backups, and a disk offload target leaves no host backup to read.
+        """
         return (
             self.args.colocate
             and is_lora_enabled(self.args)
@@ -877,12 +878,10 @@ class MegatronTrainRayActor(TrainRayActor):
     @with_logs
     @timer
     def export_hf(self, rollout_id: int, path: str) -> None:
-        """Export current weights as an HF checkpoint to ``path`` (collective).
+        """Export current weights as an HF checkpoint to `path` (collective).
 
-        Uses the direct megatron->HF converters (the weight updater's machinery), so
-        export coverage matches weight-sync coverage. Unlike the periodic --save-hf
-        path inside save_model, failures propagate to the caller so an eval snapshot
-        that failed to export can be skipped loudly.
+        Includes engine-resident weights as well as weight-sync tensors. Export failures
+        propagate so callers can reject an incomplete evaluation snapshot.
         """
         self._heartbeat.bump()
         assert self.snapshot_publisher is not None, "HF export requires a snapshot publisher"

@@ -1,11 +1,7 @@
-"""Multimodal-specific preprocessing for rollout data.
+"""Expand rollout media placeholders into the token layout consumed by training.
 
-The rollout side emits one media placeholder/sentinel per media item; training
-expands it to the per-item token count so the LM sees a position per vision
-patch / audio frame. Two families live here: Kimi-VL / Kimi-K2.5 (grid-derived
-expansion of an in-vocab placeholder) and Inkling (out-of-vocab sentinels expanded
-to in-vocab placeholder runs with explicit positions). Kept separate from
-data.py (generic batching / CP slicing).
+Kimi and Inkling expand per-item placeholders; Step5 replaces the request prompt
+with the engine-expanded prompt. Generic batching and CP slicing remain in `data.py`.
 """
 
 import logging
@@ -200,12 +196,56 @@ def _expand_inkling_rollout_data_in_place(rollout_data: RolloutBatch) -> None:
         )
 
 
+# Written by miles_plugins/models/step5/processor.py: the prompt exactly as SGLang's Step3 processor
+# re-tokenizes it, every image expanded into its crop and overview blocks.
+STEP5_EXPANDED_PROMPT_KEY = "step5_expanded_prompt_ids"
+# What an image sample hands the Step5 VL model once expanded. A sample without images carries none of
+# them (its inputs stay None), so a micro-batch without images reaches the model without the keys.
+STEP5_MODEL_INPUT_KEYS = (
+    "step5_pixel_values",
+    "step5_patch_pixel_values",
+    "step5_num_patches",
+    "step5_image_positions",
+)
+
+
+def _is_step5_batch(multimodal_train_inputs: Sequence[dict[str, torch.Tensor] | None]) -> bool:
+    return any(mm is not None and "step5_num_patches" in mm for mm in multimodal_train_inputs)
+
+
+def _expand_step5_rollout_data_in_place(rollout_data: RolloutBatch, qkv_format: str) -> None:
+    """Swap each image sample's prompt for the one SGLang expanded; idempotent."""
+    assert get_parallel_state().cp.size == 1, "Step5 multimodal training does not support CP>1 yet"
+    # image positions are offset by packed-sequence starts, which only thd lays out back to back
+    assert qkv_format == "thd", f"Step5 multimodal training needs --qkv-format thd, got {qkv_format}"
+    tokens = []
+    for token_tensor, response_length, mm in zip(
+        rollout_data["tokens"], rollout_data["response_lengths"], rollout_data["multimodal_train_inputs"], strict=True
+    ):
+        # popping the expanded prompt is what marks a sample as done
+        if mm is not None and STEP5_EXPANDED_PROMPT_KEY in mm:
+            token_tensor = _swap_in_expanded_prompt(token_tensor, response_length, mm.pop(STEP5_EXPANDED_PROMPT_KEY))
+        tokens.append(token_tensor)
+    rollout_data["tokens"] = tokens
+    rollout_data["total_lengths"] = [token_tensor.size(0) for token_tensor in tokens]
+
+
+def _swap_in_expanded_prompt(
+    token_tensor: torch.Tensor, response_length: int, expanded_prompt: torch.Tensor
+) -> torch.Tensor:
+    response = token_tensor[token_tensor.size(0) - response_length :]
+    return torch.cat([expanded_prompt.to(device=token_tensor.device, dtype=token_tensor.dtype), response])
+
+
 def expand_multimodal_rollout_data_in_place(
     rollout_data: RolloutBatch,
     media_token_id: int = KIMI_VL_MEDIA_TOKEN_ID,
     qkv_format: str = "thd",
 ) -> None:
     multimodal_train_inputs = rollout_data.get("multimodal_train_inputs", None)
+    if multimodal_train_inputs is not None and _is_step5_batch(multimodal_train_inputs):
+        _expand_step5_rollout_data_in_place(rollout_data, qkv_format=qkv_format)
+        return
     if multimodal_train_inputs is not None and any(
         mm is not None and ("mm_vision_num_patches" in mm or "mm_audio_num_tokens" in mm)
         for mm in multimodal_train_inputs

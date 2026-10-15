@@ -12,6 +12,7 @@ from .mimo import MimoBridge
 from .qwen3_5 import Qwen3_5Bridge
 from .qwen3_8_next import Qwen38NextBridge
 from .qwen3_next import Qwen3NextBridge
+from .step5 import Step5Bridge
 
 __all__ = [
     "GLM4Bridge",
@@ -28,4 +29,5 @@ __all__ = [
     "JoyAILLMFlashBridge",
     "InklingBridge",
     "KimiK3Bridge",
+    "Step5Bridge",
 ]

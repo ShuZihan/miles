@@ -670,6 +670,9 @@ def train_one_step(
         assert update_successful
         ModelCompanionWeightVersionUtils.bump_weight_version(model)
         opt_param_scheduler.step(increment=num_rollouts)
+        # --chunked-optimizer-state-offload restores the masters for the step and leaves them on GPU until the
+        # training loop moves them back; Megatron's loop does it before the next forward, and ours is the step end.
+        optimizer.offload_optimizer_state_for_forward()
 
     if args.enable_sample_ownership_checker:
         if parallel_state.indep_dp.size == 1:
@@ -1054,6 +1057,12 @@ def load_model_state(
                 # refresh the fp32 masters, or the first step() restores the
                 # pre-load init values over the adapter we just wrote
                 optimizer.reload_model_params()
+
+    if optimizer is not None:
+        # MCore's fp32 masters are built on GPU and a load refreshes them there. With --chunked-optimizer-state-offload
+        # they wait on host for the first step, as Megatron's loop arranges before its first forward; train_one_step
+        # hands them back after each later one. FusedAdam's own masters only appear in that step. No-op otherwise.
+        optimizer.offload_optimizer_state_for_forward()
 
     check_peak_gpu_memory_after_load(args)
     clear_memory()

@@ -9,7 +9,7 @@ LoRA adapter pushes.
 import logging
 import random
 from argparse import Namespace
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 import torch
@@ -19,6 +19,7 @@ from tqdm import tqdm
 from miles.backends.sglang_utils.sglang_api_client import SGLangApiClient
 from miles.backends.training_utils.parallel import ParallelState
 from miles.backends.training_utils.weight_update.conn_status import ConnStatusManager
+from miles.backends.training_utils.weight_update.hf_weight_iterator.engine_resident import is_engine_resident
 from miles.backends.training_utils.weight_update.protocol import get_weight_transfer_protocol
 from miles.backends.training_utils.weight_update.session import (
     begin_weight_update,
@@ -70,6 +71,7 @@ class WeightUpdater:
             quantization_config=quantization_config,
         )
         self.weights_getter = weights_getter
+        self.model_name = model_name
         self.is_lora = is_lora
         if is_lora:
             assert lora_sync_config is not None
@@ -144,11 +146,13 @@ class WeightUpdater:
             ), "the LoRA checksum manifest is recorded on one rank, which must hold the full adapter"
         with timer("update_weights_implementation"):
             pbar = tqdm(desc=f"[{protocol.group_name}] Update weights", total=0) if protocol.is_sender else None
-            for bucket in self._hf_weight_iterator.iter_hf_weights(
-                self.weights_getter(),
-                include_base=sync_base,
-                adapters=adapters,
-                materialize=protocol.is_sender,
+            for bucket in self._without_engine_resident(
+                self._hf_weight_iterator.iter_hf_weights(
+                    self.weights_getter(),
+                    include_base=sync_base,
+                    adapters=adapters,
+                    materialize=protocol.is_sender,
+                )
             ):
                 if protocol.is_sender:
                     if driver and checksums is not None:
@@ -169,7 +173,16 @@ class WeightUpdater:
         return True
 
     def _iter_base_buckets(self, *, materialize: bool):
-        return self._hf_weight_iterator.iter_hf_weights(self.weights_getter(), materialize=materialize)
+        buckets = self._hf_weight_iterator.iter_hf_weights(self.weights_getter(), materialize=materialize)
+        return self._without_engine_resident(buckets)
+
+    def _without_engine_resident(
+        self, buckets: Iterator[list[tuple[str, torch.Tensor]]]
+    ) -> Iterator[list[tuple[str, torch.Tensor]]]:
+        """The buckets less the weights the engines keep from their own load (``engine_resident.py``)."""
+        for bucket in buckets:
+            if sent := [(name, tensor) for name, tensor in bucket if not is_engine_resident(self.model_name, name)]:
+                yield sent
 
     def _get_updated_adapters(self) -> list[tuple[str, object]]:
         """``(lora_name, adapter_or_None)`` pairs for this sync; the push set is

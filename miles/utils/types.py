@@ -381,13 +381,10 @@ class Sample:
         if self.rollout_routed_experts is not None:
             actual = len(self.rollout_routed_experts)
             expect = len(self.tokens) - 1
-            mm = self.multimodal_train_inputs or {}
-            extra = sum(
-                int(c) - 1 for key in ("mm_vision_num_patches", "mm_audio_num_tokens") for c in list(mm.get(key) or [])
-            )
-            assert actual in (expect, expect + extra), (
+            expanded = self._num_media_expanded_tokens() - 1
+            assert actual in (expect, expanded), (
                 f"rollout_routed_experts length ({actual}) != len(tokens) - 1 ({expect})"
-                f" or media-expanded ({expect + extra})"
+                f" or media-expanded ({expanded})"
             )
         if self.rollout_indexer_topk is not None:
             actual = len(self.rollout_indexer_topk)
@@ -402,6 +399,16 @@ class Sample:
             previous_end = span.abs_end
         for call in self.weight_versions:
             call.validate(num_tokens=len(self.tokens))
+
+    def _num_media_expanded_tokens(self) -> int:
+        """``len(tokens)`` once the rollout engine has expanded every media placeholder in the prompt."""
+        mm = self.multimodal_train_inputs or {}
+        if (expanded_prompt := mm.get("step5_expanded_prompt_ids")) is not None:
+            return len(expanded_prompt) + self.response_length
+        extra = sum(
+            int(c) - 1 for key in ("mm_vision_num_patches", "mm_audio_num_tokens") for c in list(mm.get(key) or [])
+        )
+        return len(self.tokens) + extra
 
     def strip_last_output_tokens(self, n: int, tokenizer) -> None:
         """Remove the last *n* output tokens and all associated per-token info."""
