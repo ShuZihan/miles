@@ -35,7 +35,11 @@ class _P2PRolloutCellUpdater(_RolloutCellUpdater):
         if engine_body is None:
             return
         checksum_utils.verify_transfer_checksums(
-            sent_checksums=sent_checksums,
+            sent_checksums=(
+                sent_checksums
+                if remote_shard.runner_role == "target"
+                else {f"{remote_shard.runner_role}.{name}": checksum for name, checksum in sent_checksums.items()}
+            ),
             engine_body=engine_body,
             cell_id=self.cell_id,
             rank=remote_shard.rollout_engine_rank,
