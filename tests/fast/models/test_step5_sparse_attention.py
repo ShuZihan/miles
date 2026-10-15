@@ -25,12 +25,8 @@ from miles.backends.training_utils.weight_update.hf_weight_iterator.engine_resid
     is_engine_resident,
 )
 from miles_plugins.models.step5.indexer import CHECKPOINT_NAMES, FP32_PARAMS  # noqa: E402
-from miles_plugins.models.step5.layers import (  # noqa: E402
-    FULL_ATTENTION_ROPE,
-    SLIDING_WINDOW_ROPE,
-    Step5Attention,
-    Step5RMSNorm,
-)
+from miles_plugins.models.step5.layer_math import FULL_ATTENTION_ROPE, SLIDING_WINDOW_ROPE  # noqa: E402
+from miles_plugins.models.step5.layers import Step5Attention, Step5RMSNorm  # noqa: E402
 from miles_plugins.models.step5.model import build_step5_spec  # noqa: E402
 from miles_plugins.models.step5.sparse_attention import Step5SparseAttention, Step5SparseCoreAttention  # noqa: E402
 

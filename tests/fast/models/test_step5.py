@@ -14,7 +14,8 @@ from miles.backends.training_utils.weight_update.hf_weight_iterator.engine_resid
     is_engine_resident,
 )
 from miles_plugins.models.step5.checkpoint_config import check_matches_checkpoint  # noqa: E402
-from miles_plugins.models.step5.layers import is_full_attention_layer, zero_centered_rms_norm  # noqa: E402
+from miles_plugins.models.step5.layer_math import zero_centered_rms_norm  # noqa: E402
+from miles_plugins.models.step5.layers import is_full_attention_layer  # noqa: E402
 from miles_plugins.models.step5.qkv_layout import fuse_qkv_and_gate, split_qkv_and_gate  # noqa: E402
 
 _SLICE = (0, 3, 4, 88, 91)
