@@ -12,8 +12,13 @@ import triton
 from torch import Tensor
 from transformer_engine.pytorch import DotProductAttention
 
-from miles_plugins.models.step5.ops.region_layout import query_blocks, region_unions, token_region_bitmap
-from miles_plugins.models.step5.ops.sparse_region_attention import HEAD_DIM, sparse_region_attention
+from miles.kernels.attention.region_sparse import (
+    HEAD_DIM,
+    query_blocks,
+    region_unions,
+    sparse_region_attention,
+    token_region_bitmap,
+)
 from miles_plugins.models.step5.region_selection import MAX_SELECTED_REGIONS, REGION_SIZE, TOP_REGIONS, RegionSelection
 
 HEADS_PER_GROUP = 16
@@ -92,13 +97,13 @@ def run_case(num_tokens: int, num_groups: int, captured: Tensor | None) -> dict[
     selection = make_selection(num_tokens, num_groups, captured, g)
 
     row = {}
-    blocks = query_blocks(selection.cu_seqlens, num_tokens)
+    blocks = query_blocks(selection.cu_seqlens, num_tokens, MAX_SELECTED_REGIONS)
     unions = region_unions(blocks, token_region_bitmap(selection.region_ids))
     real = blocks.num_tokens > 0
     # the share of the walked (token, region) pairs that the token selected
     walked = (unions.count[:, real].sum(0) * blocks.num_tokens[real]).sum()
     row["useful"] = ((selection.region_ids >= 0).sum() / walked).item()
-    sparse = lambda: sparse_region_attention(q, k, v, selection, SCALE)  # noqa: E731
+    sparse = lambda: sparse_region_attention(q, k, v, selection.region_ids, selection.cu_seqlens, SCALE)  # noqa: E731
     row["sparse fwd ms"] = timed(sparse)
     row["sparse bwd ms"] = bench_backward(sparse(), inputs)
     row["sparse saved MiB"], row["sparse peak MiB"] = peak_memory(sparse, inputs)

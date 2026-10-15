@@ -1,26 +1,39 @@
-"""Step5 sparse region attention must match dense attention masked to the selection, forward and backward."""
+"""Region-sparse attention must match dense attention masked to the selection, forward and backward."""
 
 from tests.ci.ci_register import register_cuda_ci
 
 # tuned for, and only run on, Blackwell: the chunk sizes are what its tensor memory leaves room for
 register_cuda_ci(est_time=120, suite="stage-c-8-gpu-b200", labels=["miles-plugin"], hardware=["blackwell"])
 
+from dataclasses import dataclass
+
 import pytest
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from miles_plugins.models.step5.ops.region_layout import (
-    ENTRY_REGION_SHIFT,
-    QUERY_BLOCK,
+from miles.kernels.attention.region_sparse import (
+    HEAD_DIM,
+    REGION_SIZE,
     query_blocks,
     region_unions,
+    sparse_region_attention,
     token_region_bitmap,
 )
-from miles_plugins.models.step5.ops.sparse_region_attention import HEAD_DIM, sparse_region_attention
-from miles_plugins.models.step5.region_selection import MAX_SELECTED_REGIONS, REGION_SIZE, TOP_REGIONS, RegionSelection
+from miles.kernels.attention.region_sparse.layout import ENTRY_REGION_SHIFT, QUERY_BLOCK
 
+# a model's selection budget: the scored regions plus the token's own
+TOP_REGIONS = 512
+MAX_SELECTED_REGIONS = TOP_REGIONS + 1
 HEADS_PER_GROUP = 16
+
+
+@dataclass(frozen=True)
+class RegionSelection:
+    region_ids: Tensor  # int32 [T, G, MAX_SELECTED_REGIONS], ascending, -1 padded, own region last
+    cu_seqlens: Tensor  # int32 [num_sequences + 1]
+
+
 SCALE = HEAD_DIM**-0.5
 
 
@@ -113,7 +126,7 @@ def sdpa_causal(q: Tensor, k: Tensor, v: Tensor, cu_seqlens: Tensor) -> Tensor:
 
 def run_kernel(q, k, v, selection, dout):
     qq, kk, vv = (t.clone().requires_grad_() for t in (q, k, v))
-    out = sparse_region_attention(qq, kk, vv, selection, SCALE)
+    out = sparse_region_attention(qq, kk, vv, selection.region_ids, selection.cu_seqlens, SCALE)
     out.backward(dout)
     return out.detach(), qq.grad, kk.grad, vv.grad
 
@@ -207,7 +220,7 @@ def test_layout_lists_each_blocks_union():
     g = torch.Generator(device="cuda").manual_seed(7)
     lengths = [1, 9, 300, 1000, 0, 17]
     selection = make_selection(lengths, 2, 16, g)
-    blocks = query_blocks(selection.cu_seqlens, sum(lengths))
+    blocks = query_blocks(selection.cu_seqlens, sum(lengths), MAX_SELECTED_REGIONS)
     unions = region_unions(blocks, token_region_bitmap(selection.region_ids))
     ids = selection.region_ids.cpu()
     first, count, offset = blocks.first_token.cpu(), blocks.num_tokens.cpu(), blocks.union_offset.cpu()
@@ -237,7 +250,9 @@ def test_layout_lists_each_blocks_union():
 def test_unions_fit_past_4104_regions():
     """Deep in a long sequence a block's union is bounded by 513 regions per token; unions still never overlap."""
     lengths = [33_003, 5, 0, 40_000]
-    blocks = query_blocks(torch.tensor([0, *lengths]).cumsum(0).to(torch.int32).cuda(), sum(lengths))
+    blocks = query_blocks(
+        torch.tensor([0, *lengths]).cumsum(0).to(torch.int32).cuda(), sum(lengths), MAX_SELECTED_REGIONS
+    )
     capacity = [
         min(b + 1, min(QUERY_BLOCK, n - b * QUERY_BLOCK) * MAX_SELECTED_REGIONS)
         for n in lengths

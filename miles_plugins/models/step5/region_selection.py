@@ -8,7 +8,9 @@ from dataclasses import dataclass
 
 import torch
 
-REGION_SIZE = 8
+# the sparse kernel's region granularity, so the selection and the attention agree on it
+from miles.kernels.attention.region_sparse import REGION_SIZE  # noqa: F401
+
 TOP_REGIONS = 512
 # The scored regions plus the query's own (partial) region.
 MAX_SELECTED_REGIONS = TOP_REGIONS + 1

@@ -1,6 +1,6 @@
-"""The form of a ``RegionSelection`` that the sparse region attention kernels walk.
+"""The form of a region selection that the sparse region attention kernels walk.
 
-A query block is the up to 8 tokens of one region of queries, which share their candidate
+A region is 8 consecutive tokens of one sequence in a THD pack. A query block is the up to 8 tokens of one region of queries, which share their candidate
 regions. Each block lists the union of its tokens' selected regions, every entry tagged with
 the tokens that chose it. Every buffer is sized from tensor shapes, so no length is read back
 to the host.
@@ -13,8 +13,8 @@ import triton
 import triton.language as tl
 from torch import Tensor
 
-from miles_plugins.models.step5.region_selection import MAX_SELECTED_REGIONS, REGION_SIZE
-
+# tokens per region; region r of a sequence covers its tokens [8r, 8r + 8)
+REGION_SIZE = 8
 QUERY_BLOCK = REGION_SIZE
 # an entry is region << ENTRY_REGION_SHIFT | token_mask, bit i set when the block's token i chose it
 ENTRY_REGION_SHIFT = QUERY_BLOCK
@@ -52,7 +52,7 @@ class RegionUnions:
 
 @triton.jit
 def _sequence_union_capacity(length, QUERY_BLOCK: tl.constexpr, MAX_UNION: tl.constexpr):
-    """Block ``b`` of a sequence holds at most ``b + 1`` regions, and 513 per token."""
+    """Block ``b`` of a sequence holds at most ``b + 1`` regions, and ``MAX_UNION // QUERY_BLOCK`` per token."""
     full = (length // QUERY_BLOCK).to(tl.int64)
     capped = tl.minimum(full, MAX_UNION)
     capacity = capped * (capped + 1) // 2 + (full - capped) * MAX_UNION
@@ -97,7 +97,8 @@ def _query_block_table_kernel(
         offset0 += tl.sum(capacity, 0)
 
 
-def query_blocks(cu_seqlens: Tensor, num_tokens: int) -> QueryBlocks:
+def query_blocks(cu_seqlens: Tensor, num_tokens: int, max_selected: int) -> QueryBlocks:
+    """The query blocks of a THD pack, each with room for its tokens' union of at most ``max_selected`` regions."""
     num_seqs = cu_seqlens.shape[0] - 1
     bound = num_tokens // QUERY_BLOCK + num_seqs
     device = cu_seqlens.device
@@ -114,7 +115,7 @@ def query_blocks(cu_seqlens: Tensor, num_tokens: int) -> QueryBlocks:
         SEQS_POW2=triton.next_power_of_2(num_seqs),
         BLOCKS_PER_STEP=1024,
         QUERY_BLOCK=QUERY_BLOCK,
-        MAX_UNION=QUERY_BLOCK * MAX_SELECTED_REGIONS,
+        MAX_UNION=QUERY_BLOCK * max_selected,
         num_warps=4,
     )
     return QueryBlocks(
@@ -122,18 +123,18 @@ def query_blocks(cu_seqlens: Tensor, num_tokens: int) -> QueryBlocks:
         num_tokens=num_tokens_in_block,
         seq_start=seq_start,
         union_offset=union_offset,
-        group_stride=_union_capacity(num_tokens),
+        group_stride=_union_capacity(num_tokens, max_selected),
     )
 
 
-def _union_capacity(num_tokens: int) -> int:
+def _union_capacity(num_tokens: int, max_selected: int) -> int:
     """The union entries any packing of ``num_tokens`` tokens can need, per group.
 
     A sequence of length L needs at most ``(L + 7)(L + 15) / 128``, convex in L, so one sequence
-    plus one entry per other sequence bounds the sum; and no union outgrows its tokens' 513 each.
+    plus one entry per other sequence bounds the sum; and no union outgrows its tokens' ``max_selected`` each.
     """
     one_sequence = triton.cdiv((num_tokens + QUERY_BLOCK - 1) * (num_tokens + 2 * QUERY_BLOCK - 1), 2 * QUERY_BLOCK**2)
-    return min(MAX_SELECTED_REGIONS * num_tokens, one_sequence + num_tokens)
+    return min(max_selected * num_tokens, one_sequence + num_tokens)
 
 
 @triton.jit

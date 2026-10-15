@@ -20,6 +20,7 @@ from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.utils import ensure_metadata_has_dp_cp_group, make_sharded_tensors_for_checkpoint
 from safetensors import safe_open
 
+from miles.kernels.linear.batch_invariant_linear import batch_invariant_linear
 from miles_plugins.models.step5.indexer_ops import (
     HEADS_PER_GROUP,
     INDEXER_HEAD_DIM,
@@ -34,7 +35,6 @@ from miles_plugins.models.step5.indexer_ops import (
     top_regions,
 )
 from miles_plugins.models.step5.layers import FULL_ATTENTION_ROPE
-from miles_plugins.models.step5.ops.index_weights import step5_index_weights
 from miles_plugins.models.step5.region_selection import MAX_SELECTED_REGIONS, REGION_SIZE, TOP_REGIONS, RegionSelection
 
 INDEXER_NUM_HEADS = 16
@@ -215,7 +215,7 @@ class Step5Indexer(MegatronModule):
         query = to_e4m3(
             norm_rope_query(query.view(count, -1, INDEXER_HEAD_DIM), self.q_norm_weight, cos, sin, self.eps)
         )
-        weights = step5_index_weights(tokens[rows], self.w_weight.to(torch.bfloat16))
+        weights = batch_invariant_linear(tokens[rows], self.w_weight.to(torch.bfloat16))
         groups = (count, self.num_local_groups, HEADS_PER_GROUP)
         return query.view(*groups, INDEXER_HEAD_DIM), weights.float().view(groups) * WEIGHT_SCALE
 

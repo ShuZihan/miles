@@ -15,9 +15,9 @@ from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+from miles.kernels.attention.region_sparse import sparse_region_attention
 from miles_plugins.models.step5.indexer import Step5Indexer
 from miles_plugins.models.step5.layers import FULL_ATTENTION_ROPE, Step5Attention
-from miles_plugins.models.step5.ops.sparse_region_attention import sparse_region_attention
 from miles_plugins.models.step5.region_selection import RegionSelection
 
 # The kernel's tiles are 8 query tokens times one KV group's heads, tuned for Step5's 16.
@@ -52,7 +52,9 @@ class Step5SparseCoreAttention(MegatronModule):
         self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, selection: RegionSelection
     ) -> torch.Tensor:
         """Attend over the pack with `query` `[T, heads, 192]` and `key`/`value` `[T, groups, 192]`."""
-        return sparse_region_attention(query, key, value, selection, self.softmax_scale)
+        return sparse_region_attention(
+            query, key, value, selection.region_ids, selection.cu_seqlens, self.softmax_scale
+        )
 
 
 class Step5SparseAttention(Step5Attention):

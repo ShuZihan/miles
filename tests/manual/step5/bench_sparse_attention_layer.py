@@ -25,9 +25,9 @@ from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.transformer.transformer_config import TransformerConfig
 from safetensors import safe_open
 
+from miles.kernels.attention.region_sparse import sparse_region_attention
 from miles_plugins.models.step5.indexer import read_checkpoint_layer
 from miles_plugins.models.step5.layers import FULL_ATTENTION_ROPE, Step5Attention, Step5RMSNorm
-from miles_plugins.models.step5.ops.sparse_region_attention import sparse_region_attention
 from miles_plugins.models.step5.qkv_layout import fuse_qkv_and_gate
 from miles_plugins.models.step5.sparse_attention import Step5SparseAttention, Step5SparseCoreAttention
 
@@ -205,7 +205,9 @@ def main() -> None:
         qq, kk, vv = (t.clone().requires_grad_() for t in (q, k, v))
         fwd, bwd = _events(), _events()
         fwd[0].record()
-        out = sparse_region_attention(qq, kk, vv, selection, sparse.core_attention.softmax_scale)
+        out = sparse_region_attention(
+            qq, kk, vv, selection.region_ids, selection.cu_seqlens, sparse.core_attention.softmax_scale
+        )
         fwd[1].record()
         bwd[0].record()
         out.backward(torch.ones_like(out))

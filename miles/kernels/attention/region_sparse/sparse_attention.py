@@ -1,4 +1,4 @@
-"""Step5 sparse full attention for training: forward and backward in Triton.
+"""Region-sparse attention for training: forward and backward in Triton.
 
 A program owns one query block and one KV group -- the block's tokens times the group's 16
 query heads form a 128-row tile -- and walks the union of the block's selected regions a chunk
@@ -12,16 +12,16 @@ import triton
 import triton.language as tl
 from torch import Tensor
 
-from miles_plugins.models.step5.ops.region_layout import (
+from miles.kernels.attention.region_sparse.layout import (
     ENTRY_REGION_SHIFT,
     QUERY_BLOCK,
+    REGION_SIZE,
     QueryBlocks,
     RegionUnions,
     query_blocks,
     region_unions,
     token_region_bitmap,
 )
-from miles_plugins.models.step5.region_selection import MAX_SELECTED_REGIONS, REGION_SIZE, RegionSelection
 
 HEAD_DIM = 192
 # head dim 192 is not a power of two, which tl.arange needs: every tile is split 128 + 64
@@ -400,10 +400,12 @@ class _SparseRegionAttention(torch.autograd.Function):
     """Keeps the selection for backward as its bitmap (T x G x T/8 bits) and rebuilds the unions there."""
 
     @staticmethod
-    def forward(ctx, q: Tensor, k: Tensor, v: Tensor, selection: RegionSelection, softmax_scale: float) -> Tensor:
+    def forward(
+        ctx, q: Tensor, k: Tensor, v: Tensor, region_ids: Tensor, cu_seqlens: Tensor, softmax_scale: float
+    ) -> Tensor:
         q, k, v = q.contiguous(), k.contiguous(), v.contiguous()
-        blocks = query_blocks(selection.cu_seqlens, q.shape[0])
-        bitmap = token_region_bitmap(selection.region_ids)
+        blocks = query_blocks(cu_seqlens, q.shape[0], max_selected=region_ids.shape[-1])
+        bitmap = token_region_bitmap(region_ids)
         out, lse = _forward(q, k, v, blocks, region_unions(blocks, bitmap), softmax_scale)
         ctx.save_for_backward(
             q, k, v, out, lse, blocks.first_token, blocks.num_tokens, blocks.seq_start, blocks.union_offset, bitmap
@@ -418,18 +420,20 @@ class _SparseRegionAttention(torch.autograd.Function):
         blocks = QueryBlocks(first_token, num_tokens, seq_start, union_offset, ctx.group_stride)
         unions = region_unions(blocks, bitmap)
         dq, dk, dv = _backward(q, k, v, out, dout.contiguous(), lse, blocks, unions, ctx.softmax_scale)
-        return dq, dk, dv, None, None
+        return dq, dk, dv, None, None, None
 
 
 def sparse_region_attention(
-    q: Tensor, k: Tensor, v: Tensor, selection: RegionSelection, softmax_scale: float
+    q: Tensor, k: Tensor, v: Tensor, region_ids: Tensor, cu_seqlens: Tensor, softmax_scale: float
 ) -> Tensor:
-    """Attention of each query over its KV group's selected regions, THD-packed and TP-local.
+    """Attention of each query over its KV group's selected regions, THD-packed.
 
     ``q`` is [T, Hq, 192] and ``k``/``v`` are [T, G, 192], bf16, with the query heads of group
-    ``g`` at ``g * Hq // G`` onwards; ``selection`` covers the same T tokens (``T`` equals
-    ``selection.cu_seqlens[-1]``) and G groups. Returns [T, Hq, 192] in ``q``'s dtype. Gradients
-    flow to q, k and v; the selection is an index and gets none.
+    ``g`` at ``g * Hq // G`` onwards. ``cu_seqlens`` (int32 [num_sequences + 1], ending at T)
+    holds the THD boundaries. ``region_ids`` (int32 [T, G, S]) lists, per token and group,
+    ascending region ids padded with -1; region r covers tokens [8r, 8r + 8) of the token's own
+    sequence, and the region holding the token is its last valid entry, visible only up to the
+    token. Returns [T, Hq, 192] in ``q``'s dtype. Gradients flow to q, k and v.
     """
     num_tokens, num_heads, head_dim = q.shape
     num_groups = k.shape[1]
@@ -439,9 +443,8 @@ def sparse_region_attention(
         HEAD_DIM,
     ), f"q {tuple(q.shape)}, k {tuple(k.shape)} and v {tuple(v.shape)} are not [T, Hq, 192] and [T, G, 192]"
     assert num_heads % num_groups == 0, f"{num_heads} query heads do not divide into {num_groups} KV groups"
-    ids = selection.region_ids
     assert (
-        ids.shape == (num_tokens, num_groups, MAX_SELECTED_REGIONS) and ids.dtype == torch.int32
-    ), f"the selection must be int32 [{num_tokens}, {num_groups}, {MAX_SELECTED_REGIONS}], got {ids.dtype} {tuple(ids.shape)}"
-    assert ids.stride(-1) == 1, "each token's region ids must be contiguous"
-    return _SparseRegionAttention.apply(q, k, v, selection, softmax_scale)
+        region_ids.shape[:2] == (num_tokens, num_groups) and region_ids.dtype == torch.int32
+    ), f"region_ids must be int32 [{num_tokens}, {num_groups}, S], got {region_ids.dtype} {tuple(region_ids.shape)}"
+    assert region_ids.stride(-1) == 1, "each token's region ids must be contiguous"
+    return _SparseRegionAttention.apply(q, k, v, region_ids, cu_seqlens, softmax_scale)

@@ -1,4 +1,4 @@
-"""`step5_index_weights` must be batch-invariant and match the FP64 reference."""
+"""`batch_invariant_linear` must be batch-invariant and match the FP64 reference."""
 
 from tests.ci.ci_register import register_cuda_ci
 
@@ -9,7 +9,7 @@ register_cuda_ci(
 import pytest
 import torch
 
-from miles_plugins.models.step5.ops.index_weights import step5_index_weights
+from miles.kernels.linear.batch_invariant_linear import batch_invariant_linear
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA for the Triton kernel")
 
@@ -25,7 +25,7 @@ def test_matches_fp64_reference(tokens, hidden_size, heads):
     hidden = torch.randn(tokens, hidden_size, device="cuda").to(torch.bfloat16)
     weight = (0.02 * torch.randn(heads, hidden_size, device="cuda")).to(torch.bfloat16)
 
-    got = step5_index_weights(hidden, weight)
+    got = batch_invariant_linear(hidden, weight)
     want = _reference(hidden, weight)
 
     assert torch.equal(got, want)
@@ -38,9 +38,9 @@ def test_is_invariant_to_batch_slices_and_row_padding():
     hidden = buffer[:, :hidden_size]
     weight = (0.02 * torch.randn(heads, hidden_size, device="cuda")).to(torch.bfloat16)
 
-    full = step5_index_weights(hidden, weight)
+    full = batch_invariant_linear(hidden, weight)
     pieces = [
-        step5_index_weights(hidden[start : start + count], weight) for start, count in ((0, 1), (5, 37), (64, 2048))
+        batch_invariant_linear(hidden[start : start + count], weight) for start, count in ((0, 1), (5, 37), (64, 2048))
     ]
 
     assert torch.equal(pieces[0], full[:1])

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Batch-invariant Step5 indexer head weights, rounded as the trainer's FP64 GEMM."""
+"""A batch-invariant BF16 ``x @ w.T`` for a few output columns, rounded as an FP64 GEMM."""
 
 import torch
 import triton
@@ -34,7 +34,7 @@ def _join_lanes(s, c, HEADS: tl.constexpr, LANES: tl.constexpr, LEVELS: tl.const
 
 
 @triton.jit
-def _index_weights_kernel(
+def _batch_invariant_linear_kernel(
     X,
     W,
     Out,
@@ -63,8 +63,8 @@ def _index_weights_kernel(
     tl.store(Out + token * stride_out + heads, (s + c).to(tl.bfloat16))
 
 
-def step5_index_weights(hidden_states: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
-    """Return BF16 head weights with batch-invariant FP64-equivalent rounding.
+def batch_invariant_linear(hidden_states: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    """Return BF16 ``hidden_states @ weight.T`` with batch-invariant FP64-equivalent rounding.
 
     Inputs are BF16 ``[T, K]`` and ``[H, K]`` tensors with unit inner stride;
     ``H`` is a power of two up to 16 and ``K`` is a multiple of 256 on CUDA.
@@ -73,7 +73,7 @@ def step5_index_weights(hidden_states: torch.Tensor, weight: torch.Tensor) -> to
     if hidden_states.device.type != "cuda":
         return (hidden_states.double() @ weight.double().T).to(torch.bfloat16)
     if torch.version.hip is not None:
-        raise ValueError("Step5 index weights require NVIDIA CUDA")
+        raise ValueError("batch_invariant_linear requires NVIDIA CUDA")
     if (
         hidden_states.ndim != 2
         or weight.ndim != 2
@@ -85,15 +85,15 @@ def step5_index_weights(hidden_states: torch.Tensor, weight: torch.Tensor) -> to
         or weight.stride(1) != 1
         or weight.device != hidden_states.device
     ):
-        raise ValueError("Step5 index weights require BF16 [T, K] and [H, K] rows")
+        raise ValueError("batch_invariant_linear requires BF16 [T, K] and [H, K] rows")
     tokens, k = hidden_states.shape
     heads = weight.shape[0]
     if heads not in (1, 2, 4, 8, 16):
-        raise ValueError("Step5 index weights support at most 16 heads, a power of two")
+        raise ValueError("batch_invariant_linear supports at most 16 output columns, a power of two")
     out = torch.empty((tokens, heads), dtype=torch.bfloat16, device=hidden_states.device)
     if tokens:
         heads_per_program = 1 if tokens * heads < _SPLIT_HEADS_BELOW else min(heads, 8)
-        _index_weights_kernel[(tokens, heads // heads_per_program)](
+        _batch_invariant_linear_kernel[(tokens, heads // heads_per_program)](
             hidden_states,
             weight,
             out,
