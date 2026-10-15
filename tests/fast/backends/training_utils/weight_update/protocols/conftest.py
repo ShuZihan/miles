@@ -256,7 +256,9 @@ class _FakeRolloutApi:
                 continue
             offset = 1.0 if rank in self.corrupted_ranks or selector in self.corrupted_roles else 0.0
             checksums = {
-                name: hash_tensor_sha256(torch.tensor(landed[self.published_address(rank, name, selector)]) + offset)
+                (name if selector == "target" else f"{selector}.{name}"): hash_tensor_sha256(
+                    torch.tensor(landed[self.published_address(rank, name, selector)]) + offset
+                )
                 for name in names
             }
             records.append({"checksums": checksums, "parallelism_info": [{"role": "tp", "rank": rank}]})

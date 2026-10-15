@@ -1112,6 +1112,7 @@ class TestUnregisterFromRouterRetries:
             await cell.mark_errored()
 
         assert cell.is_serving
+        assert cell._get_health_checker_active_and_epoch().active
         router.failures = 0
 
     async def test_the_retries_stop_once_the_unregister_budget_is_spent(self, cell_env, monkeypatch):

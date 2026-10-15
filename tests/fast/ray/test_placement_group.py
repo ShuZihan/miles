@@ -107,18 +107,15 @@ class TestFrozenInferenceChecksums:
         monkeypatch.setattr(placement_group_module, "is_event_logger_initialized", lambda: True)
         event_logger = MagicMock()
         monkeypatch.setattr(placement_group_module, "get_event_logger", lambda: event_logger)
-        controller = SimpleNamespace(check_weights=AsyncMock(return_value=[]))
-
-        await placement_group_module._maybe_log_inference_engine_weight_checksums(
+        placement_group_module._log_inference_engine_weight_checksums(
             _make_args(log_inference_engine_weight_checksums=True),
-            inference_controller=controller,
+            checksum_results=[],
             rollout_id=None,
             trainer_model_id=None,
             output=WeightUpdateOutput(weight_version=1, failed_cell_ids=()),
             snapshot_cell_id_to_hashes={},
         )
 
-        controller.check_weights.assert_awaited_once()
         event_logger.log.assert_not_called()
 
 
@@ -374,7 +371,9 @@ class TestUpdateWeights:
 
         actor_model, rollout_executor = self._fakes(weight_version=7)
 
-        inference_controller = MagicMock(start_update_weights=AsyncMock(), end_update_weights=AsyncMock())
+        inference_controller = MagicMock(
+            start_update_weights=AsyncMock(), end_update_weights=AsyncMock(return_value=[])
+        )
 
         await update_weights(self._args(), actor_model, rollout_executor, inference_controller, rollout_id=3)
 
@@ -387,7 +386,9 @@ class TestUpdateWeights:
         from miles.ray.placement_group import update_weights
 
         actor_model, rollout_executor = self._fakes(weight_version=7)
-        inference_controller = MagicMock(start_update_weights=AsyncMock(), end_update_weights=AsyncMock())
+        inference_controller = MagicMock(
+            start_update_weights=AsyncMock(), end_update_weights=AsyncMock(return_value=[])
+        )
         hook = AsyncMock(side_effect=AssertionError("fault hook failed"))
         monkeypatch.setattr(placement_group_module, "reach_fault_hook_async", hook)
 
@@ -410,7 +411,9 @@ class TestUpdateWeights:
 
         actor_model, rollout_executor = self._fakes(weight_version=7)
 
-        inference_controller = MagicMock(start_update_weights=AsyncMock(), end_update_weights=AsyncMock())
+        inference_controller = MagicMock(
+            start_update_weights=AsyncMock(), end_update_weights=AsyncMock(return_value=[])
+        )
 
         await update_weights(
             self._args(), actor_model, rollout_executor, inference_controller, rollout_id=3, trainer_model_id="alpha"
@@ -467,8 +470,7 @@ class TestUpdateWeights:
         }
         return MagicMock(
             start_update_weights=AsyncMock(return_value=info),
-            end_update_weights=AsyncMock(),
-            check_weights=AsyncMock(return_value=[(metadata, body)]),
+            end_update_weights=AsyncMock(return_value=[(metadata, body)]),
         )
 
     async def test_a_fresh_run_stamps_the_startup_sync_before_the_first_rollout(self, monkeypatch):
@@ -519,7 +521,9 @@ class TestUpdateWeights:
 
         actor_model, rollout_executor = self._fakes(weight_version=None)
 
-        inference_controller = MagicMock(start_update_weights=AsyncMock(), end_update_weights=AsyncMock())
+        inference_controller = MagicMock(
+            start_update_weights=AsyncMock(), end_update_weights=AsyncMock(return_value=[])
+        )
 
         await update_weights(self._args(), actor_model, rollout_executor, inference_controller)
 
@@ -532,7 +536,9 @@ class TestUpdateWeights:
         actor_model, rollout_executor = self._fakes(weight_version=None)
         actor_model.update_weights = AsyncMock(side_effect=RuntimeError("weight sync failed"))
         inference_controller = MagicMock(
-            start_update_weights=AsyncMock(), abort_update_weights=AsyncMock(), end_update_weights=AsyncMock()
+            start_update_weights=AsyncMock(),
+            abort_update_weights=AsyncMock(),
+            end_update_weights=AsyncMock(return_value=[]),
         )
 
         with pytest.raises(RuntimeError, match="weight sync failed"):

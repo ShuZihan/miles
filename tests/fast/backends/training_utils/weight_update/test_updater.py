@@ -109,6 +109,7 @@ class TestMarkCellsErroredOnAnyRank:
         gathered = _GatheredVerdicts([["cell-a"]])
         _install_fake_gloo(monkeypatch, gathered)
 
-        updater_module._mark_cells_errored_on_any_rank([])
+        failed_cell_ids = updater_module._mark_cells_errored_on_any_rank([])
 
+        assert failed_cell_ids == {"cell-a"}
         assert gathered.contributed == [[]]

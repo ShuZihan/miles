@@ -752,3 +752,40 @@ class TestLifetime:
         clock.advance(10_000.0)
         runtime_hooks._reach(_CELL_HOOK, {"rollout_id": 3})
         assert operations.stopped == ["cell-0"]
+
+
+class TestSynchronousCellDispatch:
+    @pytest.mark.parametrize("immediate", [False, True])
+    async def test_worker_thread_dispatch_uses_the_cell_owner_loop(self, immediate: bool) -> None:
+        """Synchronous fault entry points must execute cell operations on their owning loop."""
+        loop = asyncio.get_running_loop()
+        operations = _CellOperations()
+        hooks = _FaultHookController()
+        hooks.configure(resources=FaultHookResources(cell_operations=operations, owner_loop=loop))
+        request = _stop(hook_name=None if immediate else _CELL_HOOK)
+
+        async with asyncio.timeout(5):
+            if immediate:
+                await asyncio.to_thread(_set, hooks, request)
+            else:
+                _set(hooks, request)
+                await asyncio.to_thread(hooks._reach, _CELL_HOOK, {})
+
+        assert operations.stopped == ["cell-0"]
+        assert operations.loops == [loop]
+
+    async def test_synchronous_dispatch_on_the_owner_loop_fails_without_deadlocking(self) -> None:
+        """A synchronous caller on the owner loop must fail before waiting on itself."""
+        operations = _CellOperations()
+        hooks = _FaultHookController()
+        hooks.configure(
+            resources=FaultHookResources(
+                cell_operations=operations,
+                owner_loop=asyncio.get_running_loop(),
+            )
+        )
+
+        with pytest.raises(AssertionError, match="Use asynchronous fault hooks"):
+            _set(hooks, _stop(hook_name=None))
+
+        assert operations.stopped == []

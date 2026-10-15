@@ -110,6 +110,7 @@ def _make_updater(
         enable_mtp_training=False,
         fully_async=False,
         colocate=True,
+        update_weight_transfer_mode="broadcast",
     )
     with patch(f"{_UPDATER_MODULE}.get_weight_transfer_protocol", return_value=protocol):
         return WeightUpdater(
@@ -230,6 +231,8 @@ class TestWeightUpdateSessionFrame:
             _make_engines(calls, failing_method=failed_method, failing_engine_index=failed_engine_index)
         )
 
+        updater.args.colocate = False
+        updater.args.update_weight_transfer_mode = "p2p"
         _run(updater)
 
         phases = _PREPARE_PHASES + _FINALIZE_PHASES
@@ -305,3 +308,19 @@ class TestExplicitWeightVersion:
 
         assert result is False
         assert calls == []
+
+
+class TestPreparationFailure:
+    @pytest.mark.parametrize("failed_method", _PREPARE_PHASES)
+    @pytest.mark.parametrize("colocate", [False, True])
+    def test_non_partial_transfers_stop_before_sending(self, failed_method: str, colocate: bool) -> None:
+        """A failed preparation must prevent writes to an engine that is not ready."""
+        updater = _make_updater(_make_engines([], failing_method=failed_method))
+        updater.args.colocate = colocate
+        updater._hf_weight_iterator.iter_hf_weights.return_value = iter([{"weight": object()}])
+
+        with pytest.raises(RuntimeError, match="preparation failed"):
+            _run(updater)
+
+        updater.protocol.send_bucket.assert_not_called()
+        updater.protocol.finalize.assert_not_called()
