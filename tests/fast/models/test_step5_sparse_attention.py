@@ -35,7 +35,7 @@ from miles_plugins.models.step5.model import build_step5_spec  # noqa: E402
 from miles_plugins.models.step5.sparse_attention import Step5SparseAttention, Step5SparseCoreAttention  # noqa: E402
 
 # The original layer indices each model flag set builds (scripts/models/step5*.py).
-_ORIGINAL_LAYERS = {"step5": range(92), "step5-8layer": range(8), "step5-4layer": (0, 3, 88, 91)}
+_ORIGINAL_LAYERS = {"step5": range(92), "step5-5layer": (0, 3, 4, 88, 91)}
 
 
 def _flag(argv: list[str], name: str) -> str:

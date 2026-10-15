@@ -65,8 +65,8 @@ def test_one_node_micro_batch_grows_to_hold_a_long_response(monkeypatch, tmp_pat
 
 _TWO_NODES = {"num_nodes": 2, "num_gpus_per_node": 8, "data_dir": "/data"}
 _FULL_MODEL = {**_TWO_NODES, "model_name": "Step5"}
-# The layout, not the model, picks the recipe, so the 8-layer slice rehearses the full model's on the same nodes.
-_TWO_NODE_MODEL_NAMES = ["Step5", "Step5-8layer"]
+# The layout, not the model, picks the recipe, so the slice rehearses the full model's on the same nodes.
+_TWO_NODE_MODEL_NAMES = ["Step5", "Step5-5layer"]
 
 
 @pytest.mark.parametrize("model_name", _TWO_NODE_MODEL_NAMES)
@@ -146,8 +146,8 @@ def test_two_node_can_skip_the_eval(monkeypatch, tmp_path):
     assert not any(flag.startswith("--eval") for flag in _flag_values(commands[-1]))
 
 
-def test_8layer_rehearsal_on_two_nodes_caps_prompts_by_the_micro_batch(monkeypatch, tmp_path):
-    overrides = {**_TWO_NODES, "model_name": "Step5-8layer", "rollout_max_response_len": 3584, "num_rollout": 2}
+def test_slice_rehearsal_on_two_nodes_caps_prompts_by_the_micro_batch(monkeypatch, tmp_path):
+    overrides = {**_TWO_NODES, "model_name": "Step5-5layer", "rollout_max_response_len": 3584, "num_rollout": 2}
     commands = _record(monkeypatch, tmp_path, "train", overrides)
 
     flags = _flag_values(commands[-1])
@@ -160,8 +160,8 @@ def test_8layer_rehearsal_on_two_nodes_caps_prompts_by_the_micro_batch(monkeypat
     assert (flags["--eval-max-response-len"], flags["--eval-max-context-len"]) == ("32768", str(2048 + 32768))
 
 
-@pytest.mark.parametrize("model_name", ["Step5-8layer", "Step5-4layer"])
-def test_slices_on_one_node_keep_the_tp1_torch_dist_recipe(monkeypatch, tmp_path, model_name):
+def test_the_slice_on_one_node_keeps_the_tp1_torch_dist_recipe(monkeypatch, tmp_path):
+    model_name = "Step5-5layer"
     commands = _record(monkeypatch, tmp_path, "train", {"model_name": model_name, "ckpt_dir": "/ckpt"})
 
     flags = _flag_values(commands[-1])
@@ -209,7 +209,7 @@ def test_two_node_recipe_refuses_image_prompts():
     module = import_launch_script(_LAUNCHER)
 
     with pytest.raises(AssertionError, match="text decoder only"):
-        module.ScriptArgs(**_TWO_NODES, model_name="Step5-8layer", task="geo3k")
+        module.ScriptArgs(**_TWO_NODES, model_name="Step5-5layer", task="geo3k")
 
 
 def test_two_node_recipe_refuses_a_response_its_micro_batch_cannot_hold():

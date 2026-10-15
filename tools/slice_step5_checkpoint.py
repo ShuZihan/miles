@@ -145,7 +145,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--src", type=Path, required=True, help="Step5 checkpoint with the step5 config.json")
     parser.add_argument("--dst", type=Path, required=True, help="output directory (must not exist)")
-    parser.add_argument("--layers", required=True, help="comma-separated original decoder layers, e.g. 0,3,88,91")
+    parser.add_argument("--layers", required=True, help="comma-separated original decoder layers, e.g. 0,3,4,88,91")
     args = parser.parse_args()
     plan = slice_checkpoint(src=args.src, dst=args.dst, layers=[int(i) for i in args.layers.split(",")])
     print(f"wrote {args.dst}: layers {plan.layer_map}")

@@ -9,7 +9,7 @@ with an overlay (`pip install --target /scratch/ref-pylib transformers==5.15.0`,
 
    ```bash
    python tools/slice_step5_checkpoint.py --src /scratch/step5_ckpt/fp8_vit_mtp3 \
-       --dst /scratch/step5_slices/step5-4layer --layers 0,3,88,91
+       --dst /scratch/step5_slices/step5-5layer --layers 0,3,4,88,91
    ```
 
 2. Shard the slice for the reference, then write prompts and golden log-probs. `--valid-vocab` matches SGLang,
@@ -17,13 +17,13 @@ with an overlay (`pip install --target /scratch/ref-pylib transformers==5.15.0`,
 
    ```bash
    cd /scratch/step5_ckpt/fp8_vit_mtp3/inference
-   python convert.py --checkpoint /scratch/step5_slices/step5-4layer \
-       --out-dir /scratch/step5_ref/step5-4layer --tp-size 4 --ep-size 4
+   python convert.py --checkpoint /scratch/step5_slices/step5-5layer \
+       --out-dir /scratch/step5_ref/step5-5layer --tp-size 4 --ep-size 4
    python make_prompts.py /scratch/step5_golden/prompts.json
    PYTHONPATH=/scratch/ref-pylib torchrun --standalone --nproc-per-node=4 golden_logprobs.py \
-       --ref-code . --tp-dir /scratch/step5_ref/step5-4layer/tp4 \
+       --ref-code . --tp-dir /scratch/step5_ref/step5-5layer/tp4 \
        --prompts /scratch/step5_golden/prompts.json --valid-vocab 128815 \
-       --out /scratch/step5_golden/step5-4layer.pt
+       --out /scratch/step5_golden/step5-5layer.pt
    ```
 
    Copy `make_prompts.py` and `golden_logprobs.py` next to the reference code first.
@@ -33,8 +33,8 @@ with an overlay (`pip install --target /scratch/ref-pylib transformers==5.15.0`,
    CuTe DSA kernels:
 
    ```bash
-   python compare_sglang.py --golden /scratch/step5_golden/step5-4layer.pt \
-       --url http://127.0.0.1:30000 --out /scratch/step5_golden/step5-4layer-sglang.json
+   python compare_sglang.py --golden /scratch/step5_golden/step5-5layer.pt \
+       --url http://127.0.0.1:30000 --out /scratch/step5_golden/step5-5layer-sglang.json
    ```
 
 The prompts are 32, 600 and 5,000 random tokens: short, past the 512-token sliding window, and past the
@@ -46,13 +46,13 @@ The prompts are 32, 600 and 5,000 random tokens: short, past the 512-token slidi
    layer as FP8 unless its config excludes it, so give it a view of the BF16 slice first:
 
    ```bash
-   python reference_bf16_view.py --bf16 /scratch/step5_slices/step5-4layer-bf16 \
-       --fp8 /scratch/step5_slices/step5-4layer --out /scratch/step5_ref_input/step5-4layer-bf16
-   python convert.py --checkpoint /scratch/step5_ref_input/step5-4layer-bf16 \
-       --out-dir /scratch/step5_ref/step5-4layer-bf16 --tp-size 4 --ep-size 4
+   python reference_bf16_view.py --bf16 /scratch/step5_slices/step5-5layer-bf16 \
+       --fp8 /scratch/step5_slices/step5-5layer --out /scratch/step5_ref_input/step5-5layer-bf16
+   python convert.py --checkpoint /scratch/step5_ref_input/step5-5layer-bf16 \
+       --out-dir /scratch/step5_ref/step5-5layer-bf16 --tp-size 4 --ep-size 4
    ```
 
-   then run `golden_logprobs.py` on `step5-4layer-bf16/tp4` as in step 2.
+   then run `golden_logprobs.py` on `step5-5layer-bf16/tp4` as in step 2.
 
 5. Build the Megatron model from the Step5 model flags, load the HF slice through the Step5 bridge (FP8
    experts are dequantized on read, so the FP8 slice works too) and compare:
@@ -60,10 +60,10 @@ The prompts are 32, 600 and 5,000 random tokens: short, past the 512-token slidi
    ```bash
    PYTHONPATH=/root/Megatron-LM:$PWD torchrun --standalone --nproc-per-node=1 \
        tests/manual/step5/megatron_logprobs.py \
-       $(python miles/utils/external_utils/model_args_utils.py step5-4layer) \
-       --hf-checkpoint /scratch/step5_slices/step5-4layer-bf16 \
-       --golden /scratch/step5_golden/step5-4layer-bf16-v128815.pt \
-       --report /scratch/step5_golden/step5-4layer-bf16-megatron.json
+       $(python miles/utils/external_utils/model_args_utils.py step5-5layer) \
+       --hf-checkpoint /scratch/step5_slices/step5-5layer-bf16 \
+       --golden /scratch/step5_golden/step5-5layer-bf16-v128815.pt \
+       --report /scratch/step5_golden/step5-5layer-bf16-megatron.json
    ```
 
 To judge the numbers, compare the reference against itself at another layout (`--tp-size 1 --ep-size 1`):
@@ -81,7 +81,7 @@ of the same prompt (0.04 on 600 tokens before the sparse layers too), so compare
 
    ```bash
    PYTHONPATH=$PWD:/root/Megatron-LM python tests/manual/step5/vision_parity.py \
-       --hf-checkpoint /scratch/step5_slices/step5-4layer --ref-code /scratch/step5_ref_code \
+       --hf-checkpoint /scratch/step5_slices/step5-5layer --ref-code /scratch/step5_ref_code \
        --report /scratch/step5_golden/vision-parity.json
    ```
 
@@ -96,10 +96,10 @@ of the same prompt (0.04 on 600 tokens before the sparse layers too), so compare
 
    ```bash
    PYTHONPATH=$PWD:/root/Megatron-LM torchrun --standalone --nproc-per-node=1 tests/manual/step5/vl_model_smoke.py \
-       $(python miles/utils/external_utils/model_args_utils.py step5-4layer) \
+       $(python miles/utils/external_utils/model_args_utils.py step5-5layer) \
        --custom-model-provider-path miles_plugins.models.step5.vl_model.step5_vl_model_provider \
-       --hf-checkpoint /scratch/step5_slices/step5-4layer --no-gradient-accumulation-fusion \
-       --load /scratch/step5_ckpt_dist/Step5-4layer_torch_dist --no-load-optim --no-load-rng
+       --hf-checkpoint /scratch/step5_slices/step5-5layer --no-gradient-accumulation-fusion \
+       --load /scratch/step5_ckpt_dist/Step5-5layer_torch_dist --no-load-optim --no-load-rng
    ```
 
    The smoke test checks image-feature placement, gradients only through text parameters, text-only batches,
@@ -115,7 +115,7 @@ of the same prompt (0.04 on 600 tokens before the sparse layers too), so compare
    token for token; the pixel tensors match exactly on the CPU and within 2e-4 when SGLang resizes on the GPU:
 
    ```bash
-   STEP5_HF_CHECKPOINT=/scratch/step5_slices/step5-4layer pytest -s tests/manual/step5/test_processor_parity.py
+   STEP5_HF_CHECKPOINT=/scratch/step5_slices/step5-5layer pytest -s tests/manual/step5/test_processor_parity.py
    ```
 
 
@@ -130,9 +130,9 @@ The trainer recomputes the full-attention layers' region selection with the froz
    ```bash
    PYTHONPATH=$PWD:/root/Megatron-LM torchrun --standalone --nproc-per-node=1 \
        tests/manual/step5/indexer_inputs.py \
-       $(python miles/utils/external_utils/model_args_utils.py step5-8layer) \
-       --hf-checkpoint /scratch/step5_slices/step5-8layer \
-       --load /scratch/step5_ckpt_dist/Step5-8layer_torch_dist --no-load-optim --no-load-rng \
+       $(python miles/utils/external_utils/model_args_utils.py step5-5layer) \
+       --hf-checkpoint /scratch/step5_slices/step5-5layer \
+       --load /scratch/step5_ckpt_dist/Step5-5layer_torch_dist --no-load-optim --no-load-rng \
        --text-files 'docs/**/*.md' '/root/Megatron-LM/megatron/core/**/*.py' \
        --out /scratch/step5_golden/indexer_inputs.pt
    ```
@@ -144,7 +144,7 @@ The trainer recomputes the full-attention layers' region selection with the froz
 
     ```bash
     CUDA_VISIBLE_DEVICES=1 PYTHONPATH=$PWD:/root/Megatron-LM:/sgl-workspace/sglang/python \
-        python tests/manual/step5/indexer_parity.py --hf-checkpoint /scratch/step5_slices/step5-8layer \
+        python tests/manual/step5/indexer_parity.py --hf-checkpoint /scratch/step5_slices/step5-5layer \
         --inputs /scratch/step5_golden/indexer_inputs.pt --layers 3 7 \
         --ref-code /scratch/step5_ref_code --report /scratch/step5_golden/indexer_parity.json
     ```
@@ -174,7 +174,7 @@ full-layer recompute selects the forward's regions bit for bit.
 
     ```bash
     PYTHONPATH=$PWD:/root/Megatron-LM torchrun --standalone --nproc-per-node=4 \
-        tests/manual/step5/bench_sparse_attention_layer.py --hf-checkpoint /scratch/step5_slices/step5-8layer-bf16 \
+        tests/manual/step5/bench_sparse_attention_layer.py --hf-checkpoint /scratch/step5_slices/step5-5layer-bf16 \
         --inputs /scratch/step5_golden/indexer_inputs.pt --prompt text0-32768 --sequence-parallel
     ```
 

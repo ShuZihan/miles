@@ -21,7 +21,7 @@ from miles_plugins.models.step5.layers import (  # noqa: E402
 )
 from miles_plugins.models.step5.qkv_layout import fuse_qkv_and_gate, split_qkv_and_gate  # noqa: E402
 
-_SLICE = (0, 3, 88, 91)
+_SLICE = (0, 3, 4, 88, 91)
 
 
 @pytest.fixture
@@ -38,11 +38,11 @@ def _flag(argv: list[str], name: str) -> str:
 
 
 def test_sliced_model_flags_keep_each_layers_kind():
-    argv = expand_model_args("step5-4layer")
-    assert _flag(argv, "--num-layers") == "4"
-    # 0 and 88 are sliding-window, 3 and 91 full attention; 3 and 88 are MoE.
-    assert _flag(argv, "--window-attn-skip-freq") == "[1,0,1,0]"
-    assert _flag(argv, "--moe-layer-freq") == "[0,1,1,0]"
+    argv = expand_model_args("step5-5layer")
+    assert _flag(argv, "--num-layers") == "5"
+    # 0, 4 and 88 are sliding-window, 3 and 91 full attention; 3, 4 and 88 are MoE.
+    assert _flag(argv, "--window-attn-skip-freq") == "[1,0,1,1,0]"
+    assert _flag(argv, "--moe-layer-freq") == "[0,1,1,1,0]"
 
 
 def test_full_model_flags_cover_every_layer():
@@ -56,7 +56,7 @@ def test_full_model_flags_cover_every_layer():
 
 def _megatron_config(**overrides):
     config = dict(
-        num_layers=4,
+        num_layers=5,
         hidden_size=4096,
         ffn_hidden_size=13824,
         num_attention_heads=64,
@@ -66,14 +66,14 @@ def _megatron_config(**overrides):
         fp32_residual_connection=True,
         head_wise_attn_gate=True,
         window_size=(511, 0),
-        window_attn_skip_freq=[1, 0, 1, 0],
+        window_attn_skip_freq=[1, 0, 1, 1, 0],
         num_moe_experts=352,
         moe_router_topk=8,
         moe_ffn_hidden_size=1536,
         moe_shared_expert_intermediate_size=1536,
         moe_router_topk_scaling_factor=3.0,
         moe_router_enable_expert_bias=True,
-        moe_layer_freq=[0, 1, 1, 0],
+        moe_layer_freq=[0, 1, 1, 1, 0],
     )
     return SimpleNamespace(**(config | overrides))
 
@@ -81,7 +81,7 @@ def _megatron_config(**overrides):
 def _checkpoint_config(**overrides):
     full = [index % 4 == 3 for index in _SLICE]
     config = dict(
-        num_hidden_layers=4,
+        num_hidden_layers=5,
         hidden_size=4096,
         intermediate_size=13824,
         num_attention_heads=64,
@@ -123,19 +123,19 @@ def _checkpoint_config(**overrides):
         moe_router_scaling_factor=3.0,
         use_moe_router_bias=True,
         norm_expert_weight=True,
-        moe_layer_list=[1, 2],
+        moe_layer_list=[1, 2, 3],
         layer_types=["full_attention" if f else "sliding_attention" for f in full],
         rope_theta=[1e7 if f else 1e4 for f in full],
         partial_rotary_factors=[0.3333333333333333 if f else 1.0 for f in full],
-        swiglu_limits=[7.0] * 4,
-        swiglu_limits_shared=[7.0] * 4,
+        swiglu_limits=[7.0] * 5,
+        swiglu_limits_shared=[7.0] * 5,
     )
     return SimpleNamespace(**(config | overrides))
 
 
 def test_full_attention_follows_the_skip_pattern():
     config = _megatron_config()
-    assert [is_full_attention_layer(config, number) for number in range(1, 5)] == [False, True, False, True]
+    assert [is_full_attention_layer(config, number) for number in range(1, 6)] == [False, True, False, False, True]
 
 
 def test_matching_checkpoint_passes():
@@ -145,8 +145,8 @@ def test_matching_checkpoint_passes():
 @pytest.mark.parametrize(
     "megatron_overrides,match",
     [
-        ({"moe_layer_freq": [0, 1, 0, 0]}, r"moe\[2\]"),
-        ({"window_attn_skip_freq": [1, 1, 1, 0]}, r"layer_types\[1\]"),
+        ({"moe_layer_freq": [0, 1, 0, 1, 0]}, r"moe\[2\]"),
+        ({"window_attn_skip_freq": [1, 1, 1, 1, 0]}, r"layer_types\[1\]"),
         ({"window_size": (512, 0)}, "sliding_window"),
         ({"num_query_groups": 8}, "num_attention_groups"),
     ],
@@ -179,8 +179,8 @@ def test_indexer_rope_scaling_is_checked():
 
 
 def test_rope_theta_is_checked_per_layer():
-    with pytest.raises(ValueError, match=r"rope_theta\[3\]"):
-        check_matches_checkpoint(_megatron_config(), _checkpoint_config(rope_theta=[1e4, 1e7, 1e4, 1e4]))
+    with pytest.raises(ValueError, match=r"rope_theta\[4\]"):
+        check_matches_checkpoint(_megatron_config(), _checkpoint_config(rope_theta=[1e4, 1e7, 1e4, 1e4, 1e4]))
 
 
 def test_clamped_swiglu_bounds_both_halves():

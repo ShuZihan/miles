@@ -1,7 +1,7 @@
 """Compare SGLang's input-token log-probs against the reference golden outputs.
 
-    python3 compare_sglang.py --golden /scratch/step5_golden/step5-4layer.pt \
-        --url http://127.0.0.1:30000 --out /scratch/step5_golden/step5-4layer-sglang.json
+    python3 compare_sglang.py --golden /scratch/step5_golden/step5-5layer.pt \
+        --url http://127.0.0.1:30000 --out /scratch/step5_golden/step5-5layer-sglang.json
 """
 
 import argparse

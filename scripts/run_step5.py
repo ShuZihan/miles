@@ -4,11 +4,12 @@ The rollout serves the FP8 checkpoint (routed experts in FP8, everything else BF
 runs BF16 and syncs routed experts back as FP8. Full-attention (DSA) layers recompute the rollout's
 region selection with the frozen indexer and attend sparsely, so attention caps no context length.
 A micro-batch holds one prompt beside a full-length response, and text prompts that do not fit are
-dropped. The hardware layout picks the recipe. On one 4-GPU node the slices (``tools/slice_step5_checkpoint.py``)
-exercise the whole loop at TP1 from a torch_dist conversion.
+dropped. The hardware layout picks the recipe. On one 4-GPU node the 5-layer slice
+(``pb09204048/Step-5-Preview-5layer``, cut by ``tools/slice_step5_checkpoint.py``) exercises the whole loop at TP1
+from a torch_dist conversion.
 
 On 2 x 8 B300 (--num-nodes 2 --num-gpus-per-node 8) every variant runs the recipe built for the full
-model (601B total, 27B active), so a slice can rehearse it: every parameter but the frozen DSA indexer
+model (600B total, 27B active), so the slice can rehearse it: every parameter but the frozen DSA indexer
 trains, with 32K responses:
 
 - The trainer runs TP4 + SP and EP16, 22 experts per GPU. Expert data parallelism is then 1, so the
@@ -33,8 +34,8 @@ cluster over both nodes: pass --ray-hostfile to join the other node over ssh, or
 yourself and set MILES_SCRIPT_EXTERNAL_RAY=1.
 
 Args:
-    --model-name: Step5 (2 x 8 B300 only), Step5-8layer or Step5-4layer.
-    --num-nodes / --num-gpus-per-node: 2 and 8 select the 2 x 8 recipe; any other layout runs a slice at TP1.
+    --model-name: Step5 (2 x 8 B300 only) or Step5-5layer (original layers 0, 3, 4, 88, 91: one of each kind).
+    --num-nodes / --num-gpus-per-node: 2 and 8 select the 2 x 8 recipe; any other layout runs the slice at TP1.
     --task: dapo_math (text) or geo3k (one image per prompt, TP1 recipe only).
     --model-dir / --data-dir / --ckpt-dir: checkpoint, dataset and torch_dist locations.
     --num-rollout: GRPO iterations.
@@ -43,10 +44,11 @@ Args:
     --ray-hostfile: MPI-style hostfile; its other hosts join the ray cluster over ssh.
 
 Example:
-    python scripts/run_step5.py prepare --model-name Step5-4layer --model-dir /scratch/step5_slices
-    python scripts/run_step5.py train --model-name Step5-4layer --model-dir /scratch/step5_slices
-    python scripts/run_step5.py train --model-name Step5-4layer --model-dir /scratch/step5_slices --task geo3k
-    MASTER_ADDR=<head-ip> python scripts/run_step5.py train --model-name Step5-8layer --num-nodes 2 \
+    hf download pb09204048/Step-5-Preview-5layer --local-dir /scratch/step5_slices/Step5-5layer
+    python scripts/run_step5.py prepare --model-name Step5-5layer --model-dir /scratch/step5_slices
+    python scripts/run_step5.py train --model-name Step5-5layer --model-dir /scratch/step5_slices
+    python scripts/run_step5.py train --model-name Step5-5layer --model-dir /scratch/step5_slices --task geo3k
+    MASTER_ADDR=<head-ip> python scripts/run_step5.py train --model-name Step5-5layer --num-nodes 2 \
         --num-gpus-per-node 8 --model-dir /scratch/step5_slices --data-dir /scratch/datasets \
         --ray-hostfile /root/hostfile --num-rollout 2
     MASTER_ADDR=<head-ip> python scripts/run_step5.py train --model-name Step5 --num-nodes 2 \
@@ -69,8 +71,7 @@ app = typer.Typer()
 
 _MODEL_TYPES = {
     "Step5": "step5",
-    "Step5-8layer": "step5-8layer",
-    "Step5-4layer": "step5-4layer",
+    "Step5-5layer": "step5-5layer",
 }
 
 
@@ -117,7 +118,7 @@ _ONE_NODE_MAX_TOKENS_PER_GPU = 16384
 
 @dataclass
 class ScriptArgs(U.ExecuteTrainConfig):
-    model_name: Literal["Step5", "Step5-8layer", "Step5-4layer"] = "Step5-4layer"
+    model_name: Literal["Step5", "Step5-5layer"] = "Step5-5layer"
     task: Literal["dapo_math", "geo3k"] = "dapo_math"
     num_gpus_per_node: int = 4
     run_id: str = U.create_run_id()
@@ -261,7 +262,7 @@ def train(args: ScriptArgs):
         "--eps-clip 0.2 "
         "--eps-clip-high 0.28 "
         # The rollout runs FP8 experts against a BF16 trainer: replaying its expert choices removes
-        # most of the mismatch (0.013 -> 0.005 mean |logprob diff| on the 8-layer slice), TIS the rest.
+        # most of the mismatch (0.013 -> 0.005 mean |logprob diff| on an 8-layer slice), TIS the rest.
         "--use-rollout-routing-replay "
         "--use-tis "
     )
