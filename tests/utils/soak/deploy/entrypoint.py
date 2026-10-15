@@ -34,7 +34,7 @@ async def run_hot_restart_soak(
     return await run_soak(
         config=config,
         dump_dir=Path(run.dump_dir),
-        sut_run=follow_launchers(execute_gsm8k_session(run), chain=chain),
+        sut_run=follow_launchers(execute_gsm8k_session(run, accept_replaced=True), chain=chain),
         runner_config=runner_config,
         forms=forms,
         event_log=run.event_log,
