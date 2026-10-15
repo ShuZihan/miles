@@ -7,14 +7,12 @@ import pytest
 import torch
 
 pytest.importorskip("megatron.core")
-pytest.importorskip("mbridge")
 from safetensors.torch import save_file  # noqa: E402
 from tests.fast.launch_scripts.model_args_harness import expand_model_args  # noqa: E402
 
 from miles.backends.training_utils.weight_update.hf_weight_iterator.engine_resident import (  # noqa: E402
     is_engine_resident,
 )
-from miles_plugins.mbridge.step5 import Step5Bridge, Step5SafeTensorIO, dequantize_block_fp8  # noqa: E402
 from miles_plugins.models.step5.checkpoint_config import check_matches_checkpoint  # noqa: E402
 from miles_plugins.models.step5.layers import (  # noqa: E402
     clamped_swiglu,
@@ -24,6 +22,15 @@ from miles_plugins.models.step5.layers import (  # noqa: E402
 from miles_plugins.models.step5.qkv_layout import fuse_qkv_and_gate, split_qkv_and_gate  # noqa: E402
 
 _SLICE = (0, 3, 88, 91)
+
+
+@pytest.fixture
+def step5_bridge():
+    """The bridge module. mbridge is installed in the training image but not in CPU CI, so only these tests skip there."""
+    pytest.importorskip("mbridge")
+    from miles_plugins.mbridge import step5
+
+    return step5
 
 
 def _flag(argv: list[str], name: str) -> str:
@@ -220,8 +227,8 @@ def test_each_tp_rank_gets_its_groups_then_its_gate_rows(tp_size):
         torch.testing.assert_close(block, expected, rtol=0, atol=0)
 
 
-def test_norms_and_router_bias_keep_fp32_through_the_bridge():
-    bridge = object.__new__(Step5Bridge)
+def test_norms_and_router_bias_keep_fp32_through_the_bridge(step5_bridge):
+    bridge = object.__new__(step5_bridge.Step5Bridge)
     bridge.dtype = torch.bfloat16
     weight = torch.tensor([0.1234567], dtype=torch.float32)
     for name in (
@@ -236,8 +243,8 @@ def test_norms_and_router_bias_keep_fp32_through_the_bridge():
         torch.testing.assert_close(converted, weight, rtol=0, atol=0)
 
 
-def test_indexer_names_map_to_the_checkpoint_and_fp32_tensors_stay_fp32():
-    bridge = object.__new__(Step5Bridge)
+def test_indexer_names_map_to_the_checkpoint_and_fp32_tensors_stay_fp32(step5_bridge):
+    bridge = object.__new__(step5_bridge.Step5Bridge)
     bridge.dtype = torch.bfloat16
     bridge.make_vocab_size_divisible_by = None
     prefix = "decoder.layers.3.self_attention.indexer"
@@ -260,8 +267,8 @@ def test_indexer_names_map_to_the_checkpoint_and_fp32_tensors_stay_fp32():
 
 
 @pytest.mark.parametrize("tp_size", [2, 4])
-def test_indexer_q_and_w_rows_split_by_provider_group(tp_size):
-    bridge = object.__new__(Step5Bridge)
+def test_indexer_q_and_w_rows_split_by_provider_group(step5_bridge, tp_size):
+    bridge = object.__new__(step5_bridge.Step5Bridge)
     q = torch.arange(16 * 3, dtype=torch.float32).view(16 * 3, 1)  # 16 heads of 3 rows
     w = torch.arange(16, dtype=torch.float32).view(16, 1)
     name = "decoder.layers.3.self_attention.indexer"
@@ -275,8 +282,8 @@ def test_indexer_q_and_w_rows_split_by_provider_group(tp_size):
     assert all(shard is k for shard in bridge._weight_split_across_tp(f"{name}.k_weight", k, k, tp_size))
 
 
-def test_grouped_expert_names_map_to_virtual_expert_names():
-    bridge = object.__new__(Step5Bridge)
+def test_grouped_expert_names_map_to_virtual_expert_names(step5_bridge):
+    bridge = object.__new__(step5_bridge.Step5Bridge)
     assert bridge._weight_name_mapping_mlp("decoder.layers.1.mlp.experts.linear_fc1.weight17") == [
         "model.layers.1.moe.experts.17.gate_proj.weight",
         "model.layers.1.moe.experts.17.up_proj.weight",
@@ -289,7 +296,7 @@ def test_grouped_expert_names_map_to_virtual_expert_names():
     ]
 
 
-def test_virtual_expert_names_read_one_packed_row(tmp_path):
+def test_virtual_expert_names_read_one_packed_row(step5_bridge, tmp_path):
     experts, rows, cols = 3, 130, 260  # past one 128 block in both dims
     bf16 = torch.randn(experts, rows, cols).bfloat16()
     fp8 = torch.randn(experts, rows, cols).to(torch.float8_e4m3fn)
@@ -303,21 +310,24 @@ def test_virtual_expert_names_read_one_packed_row(tmp_path):
         tmp_path / "model.safetensors",
     )
 
-    io = Step5SafeTensorIO(str(tmp_path))
+    io = step5_bridge.Step5SafeTensorIO(str(tmp_path))
     loaded = io.load_some_hf_weight(
         ["model.layers.1.moe.experts.2.up_proj.weight", "model.layers.2.moe.experts.1.up_proj.weight"]
     )
 
     torch.testing.assert_close(loaded["model.layers.1.moe.experts.2.up_proj.weight"], bf16[2], rtol=0, atol=0)
     torch.testing.assert_close(
-        loaded["model.layers.2.moe.experts.1.up_proj.weight"], dequantize_block_fp8(fp8[1], scale[1]), rtol=0, atol=0
+        loaded["model.layers.2.moe.experts.1.up_proj.weight"],
+        step5_bridge.dequantize_block_fp8(fp8[1], scale[1]),
+        rtol=0,
+        atol=0,
     )
 
 
-def test_block_fp8_dequant_scales_each_block():
+def test_block_fp8_dequant_scales_each_block(step5_bridge):
     weight = torch.ones(130, 129).to(torch.float8_e4m3fn)
     scale = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    out = dequantize_block_fp8(weight, scale)
+    out = step5_bridge.dequantize_block_fp8(weight, scale)
     assert out[0, 0] == 1.0 and out[0, 128] == 2.0 and out[128, 0] == 3.0 and out[129, 128] == 4.0
 
 

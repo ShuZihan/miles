@@ -11,7 +11,6 @@ import torch
 import torch.distributed as dist
 
 pytest.importorskip("megatron.core")
-pytest.importorskip("mbridge")
 pytest.importorskip("triton")  # the sparse attention kernel's module imports it
 from megatron.core import parallel_state  # noqa: E402
 from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear  # noqa: E402
@@ -25,7 +24,6 @@ from miles.backends.megatron_utils.megatron_to_hf.step5 import convert_step5_to_
 from miles.backends.training_utils.weight_update.hf_weight_iterator.engine_resident import (  # noqa: E402
     is_engine_resident,
 )
-from miles_plugins.mbridge.step5 import Step5Bridge  # noqa: E402
 from miles_plugins.models.step5.indexer import CHECKPOINT_NAMES, FP32_PARAMS  # noqa: E402
 from miles_plugins.models.step5.layers import (  # noqa: E402
     FULL_ATTENTION_ROPE,
@@ -125,7 +123,11 @@ def _build_attention(module, core_attention, layer_number: int):
     return build_module(spec, config=_attention_config(), layer_number=layer_number)
 
 
-def _bridge() -> Step5Bridge:
+def _bridge():
+    # mbridge is installed in the training image but not in CPU CI, so only the bridge tests skip there
+    pytest.importorskip("mbridge")
+    from miles_plugins.mbridge.step5 import Step5Bridge
+
     bridge = object.__new__(Step5Bridge)
     bridge.make_vocab_size_divisible_by = None
     return bridge
@@ -135,8 +137,8 @@ def test_full_attention_parameters_are_the_bridges_attention_tensors(model_paral
     attention = _build_attention(Step5SparseAttention, Step5SparseCoreAttention, layer_number=4)
     names = {f"self_attention.{name}" for name, _ in attention.named_parameters()}
 
-    assert names == set(Step5Bridge._ATTENTION_MAPPING)
     bridge = _bridge()
+    assert names == set(bridge._ATTENTION_MAPPING)
     for name in sorted(names):
         hf_names = bridge._weight_name_mapping_attention(f"decoder.layers.3.{name}")
         assert all(hf_name.startswith("model.layers.3.self_attn.") for hf_name in hf_names), (name, hf_names)
@@ -149,7 +151,7 @@ def test_full_attention_parameters_are_the_bridges_attention_tensors(model_paral
 def test_sliding_window_parameters_are_the_bridges_without_the_indexer(model_parallel):
     attention = _build_attention(Step5Attention, _DenseCoreAttentionStub, layer_number=1)
     names = {f"self_attention.{name}" for name, _ in attention.named_parameters()}
-    assert names == {name for name in Step5Bridge._ATTENTION_MAPPING if ".indexer." not in name}
+    assert names == {name for name in _bridge()._ATTENTION_MAPPING if ".indexer." not in name}
 
 
 def test_each_attention_type_keeps_its_rope(model_parallel):
