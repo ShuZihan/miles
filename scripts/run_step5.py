@@ -1,8 +1,9 @@
 """Step5 (StepFun Step-5-Preview) GRPO on DAPO-Math or geo3k, colocated SGLang rollout and Megatron training.
 
-The rollout serves the FP8 checkpoint (routed experts in FP8, everything else BF16); the trainer
-runs BF16 and syncs routed experts back as FP8. Full-attention (DSA) layers recompute the rollout's
-region selection with the frozen indexer and attend sparsely, so attention caps no context length.
+The rollout serves the checkpoint as released (routed experts in FP8 except MoE layers 88-90, everything
+else BF16); the trainer runs BF16 and syncs each weight back in its checkpoint dtype. Full-attention (DSA)
+layers recompute the rollout's region selection with the frozen indexer and attend sparsely, so attention
+caps no context length.
 A micro-batch holds one prompt beside a full-length response, and text prompts that do not fit are
 dropped. The hardware layout picks the recipe. On one 4-GPU node the 5-layer slice
 (``pb09204048/Step-5-Preview-5layer``, cut by ``tools/slice_step5_checkpoint.py``) exercises the whole loop at TP1
@@ -37,7 +38,7 @@ Args:
     --model-name: Step5 (2 x 8 B300 only) or Step5-5layer (original layers 0, 3, 4, 88, 91: one of each kind).
     --num-nodes / --num-gpus-per-node: 2 and 8 select the 2 x 8 recipe; any other layout runs the slice at TP1.
     --task: dapo_math (text) or geo3k (one image per prompt, TP1 recipe only).
-    --model-dir / --data-dir / --ckpt-dir: checkpoint, dataset and torch_dist locations.
+    --model-dir / --data-dir: checkpoint (and its torch_dist conversion, next to it) and dataset locations.
     --num-rollout: GRPO iterations.
     --rollout-max-response-len: 32768 on 2 x 8 and 1024 otherwise unless set.
     --eval-aime / --no-eval-aime: the 2 x 8 AIME 2026 evals.
@@ -124,7 +125,6 @@ class ScriptArgs(U.ExecuteTrainConfig):
     run_id: str = U.create_run_id()
     model_dir: str = "/root/models"
     data_dir: str = "/root/datasets"
-    ckpt_dir: str = "/root/ckpt"
     megatron_path: str = "/root/Megatron-LM"
     num_rollout: int = 3
     rollout_max_response_len: int | None = None
@@ -164,7 +164,7 @@ class ScriptArgs(U.ExecuteTrainConfig):
 
     @property
     def torch_dist_checkpoint(self) -> str:
-        return f"{self.ckpt_dir}/{self.model_name}_torch_dist"
+        return f"{self.model_dir}/{self.model_name}_torch_dist"
 
     @property
     def trainer_init_checkpoint(self) -> str:
@@ -194,7 +194,7 @@ class ScriptArgs(U.ExecuteTrainConfig):
 def prepare(args: ScriptArgs):
     """Download the dataset; for the TP1 recipe, convert the FP8 checkpoint to torch_dist (experts dequantized)."""
     U = args.create_backend()
-    U.exec_command_cpu(f"mkdir -p {args.data_dir} {args.ckpt_dir}")
+    U.exec_command_cpu(f"mkdir -p {args.data_dir}")
     U.hf_download_dataset(args.task_recipe.dataset, data_dir=args.data_dir)
     if args.is_two_node_layout:
         # its trainer reads the HF checkpoint
@@ -207,7 +207,7 @@ def prepare(args: ScriptArgs):
         multinode=args.num_nodes > 1,
         num_nodes=args.num_nodes,
         extra_args=f"--expert-model-parallel-size {args.num_nodes * args.num_gpus_per_node} ",
-        dir_dst=args.ckpt_dir,
+        dir_dst=args.model_dir,
         hf_checkpoint=args.hf_checkpoint,
         megatron_path=args.megatron_path,
     )
@@ -350,7 +350,7 @@ def _two_node_sampling_args(args: ScriptArgs) -> str:
 
 
 # Expert DP is 1, so each GPU owns the Adam state of its experts plus a quarter of its other params: for the full
-# model, 36.5B and 3.4B.
+# model, 36.5B and 0.84B (13.4B non-expert params, split TP4 then sharded over DP4).
 _TWO_NODE_OPTIMIZER_OFFLOAD_ARGS = (
     # TE FusedAdam keeps the fp32 masters as int16 remainders of the bf16 params and the moments in bf16.
     "--use-precision-aware-optimizer "

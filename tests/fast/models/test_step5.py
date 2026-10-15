@@ -391,6 +391,34 @@ def test_weight_sync_uses_checkpoint_and_per_expert_names(megatron_name, shape, 
     assert _sync_names(megatron_name, torch.zeros(shape)) == hf_names
 
 
+def _sync(name: str, param: torch.Tensor) -> dict[str, torch.Tensor]:
+    from miles.backends.megatron_utils.megatron_to_hf.step5 import convert_step5_to_hf
+
+    args = SimpleNamespace(num_query_groups=4, num_attention_heads=8, kv_channels=3, tensor_model_parallel_size=2)
+    return dict(convert_step5_to_hf(args, name, param))
+
+
+@pytest.mark.parametrize(
+    "module_name,hf_prefix",
+    [("mlp.experts.linear_fc1.weight7", "moe.experts.7"), ("mlp.shared_experts.linear_fc1.weight", "share_expert")],
+)
+def test_weight_sync_sends_the_gate_rows_then_the_up_rows(module_name, hf_prefix):
+    gate, up = torch.randn(3, 5), torch.randn(3, 5)
+    sent = _sync(f"module.module.decoder.layers.2.{module_name}", torch.cat([gate, up]))
+    torch.testing.assert_close(sent[f"model.layers.2.{hf_prefix}.gate_proj.weight"], gate, rtol=0, atol=0)
+    torch.testing.assert_close(sent[f"model.layers.2.{hf_prefix}.up_proj.weight"], up, rtol=0, atol=0)
+
+
+def test_weight_sync_splits_the_qkv_and_gate_rows_the_bridge_fused():
+    query, key, value, gate = torch.randn(8 * 3, 5), torch.randn(4 * 3, 5), torch.randn(4 * 3, 5), torch.randn(8, 5)
+    fused = fuse_qkv_and_gate(query=query, key=key, value=value, gate=gate, num_query_groups=4, tp_size=2)
+    sent = _sync("module.module.decoder.layers.2.self_attention.linear_qkv.weight", fused)
+    for projection, expected in (("q", query), ("k", key), ("v", value), ("g", gate)):
+        torch.testing.assert_close(
+            sent[f"model.layers.2.self_attn.{projection}_proj.weight"], expected, rtol=0, atol=0
+        )
+
+
 @pytest.mark.parametrize(
     "name,checkpoint_name",
     [

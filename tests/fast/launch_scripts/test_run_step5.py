@@ -162,10 +162,10 @@ def test_slice_rehearsal_on_two_nodes_caps_prompts_by_the_micro_batch(monkeypatc
 
 def test_the_slice_on_one_node_keeps_the_tp1_torch_dist_recipe(monkeypatch, tmp_path):
     model_name = "Step5-5layer"
-    commands = _record(monkeypatch, tmp_path, "train", {"model_name": model_name, "ckpt_dir": "/ckpt"})
+    commands = _record(monkeypatch, tmp_path, "train", {"model_name": model_name, "model_dir": "/models"})
 
     flags = _flag_values(commands[-1])
-    assert flags["--ref-load"] == f"/ckpt/{model_name}_torch_dist"
+    assert flags["--ref-load"] == f"/models/{model_name}_torch_dist"
     assert (flags["--tensor-model-parallel-size"], flags["--expert-model-parallel-size"]) == ("1", "4")
     assert (flags["--rollout-max-response-len"], flags["--max-tokens-per-gpu"]) == ("1024", "16384")
     assert flags["--rollout-max-prompt-len"] == str(16384 - 1024)

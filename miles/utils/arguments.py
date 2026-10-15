@@ -4363,8 +4363,8 @@ def hf_validate_args(args, hf_config):
         ):
             continue
         if hasattr(hf_config, hf_config_name):
-            # A per-layer list (Step5's rope_theta) has no single megatron flag; the model spec checks it.
-            if isinstance(getattr(hf_config, hf_config_name), list):
+            # A per-layer rope_theta (Step5's) has no single megatron flag; the model spec checks it.
+            if hf_config_name == "rope_theta" and isinstance(hf_config.rope_theta, list):
                 continue
             if not compare_fn(getattr(hf_config, hf_config_name), getattr(args, megatron_config_name)):
                 errors.append(

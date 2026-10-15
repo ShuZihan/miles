@@ -52,7 +52,8 @@ The prompts are 32, 600 and 5,000 random tokens: short, past the 512-token slidi
        --out-dir /scratch/step5_ref/step5-5layer-bf16 --tp-size 4 --ep-size 4
    ```
 
-   then run `golden_logprobs.py` on `step5-5layer-bf16/tp4` as in step 2.
+   then run `golden_logprobs.py` on `step5-5layer-bf16/tp4` as in step 2, writing
+   `--out /scratch/step5_golden/step5-5layer-bf16.pt`.
 
 5. Build the Megatron model from the Step5 model flags, load the HF slice through the Step5 bridge (FP8
    experts are dequantized on read, so the FP8 slice works too) and compare:
@@ -62,7 +63,7 @@ The prompts are 32, 600 and 5,000 random tokens: short, past the 512-token slidi
        tests/manual/step5/megatron_logprobs.py \
        $(python miles/utils/external_utils/model_args_utils.py step5-5layer) \
        --hf-checkpoint /scratch/step5_slices/step5-5layer-bf16 \
-       --golden /scratch/step5_golden/step5-5layer-bf16-v128815.pt \
+       --golden /scratch/step5_golden/step5-5layer-bf16.pt \
        --report /scratch/step5_golden/step5-5layer-bf16-megatron.json
    ```
 
@@ -99,7 +100,7 @@ of the same prompt (0.04 on 600 tokens before the sparse layers too), so compare
        $(python miles/utils/external_utils/model_args_utils.py step5-5layer) \
        --custom-model-provider-path miles_plugins.models.step5.vl_model.step5_vl_model_provider \
        --hf-checkpoint /scratch/step5_slices/step5-5layer --no-gradient-accumulation-fusion \
-       --load /scratch/step5_ckpt_dist/Step5-5layer_torch_dist --no-load-optim --no-load-rng
+       --load /scratch/step5_slices/Step5-5layer_torch_dist --no-load-optim --no-load-rng
    ```
 
    The smoke test checks image-feature placement, gradients only through text parameters, text-only batches,
@@ -112,7 +113,7 @@ of the same prompt (0.04 on 600 tokens before the sparse layers too), so compare
 
 8. `test_processor_parity.py` runs miles' `Step5TrainProcessor` and SGLang's Step3-VL processor on the request
    miles sends (a small square, a 1000x300 and a 1600x1200 image, and a tall one). The expanded prompt must match
-   token for token; the pixel tensors match exactly on the CPU and within 2e-4 when SGLang resizes on the GPU:
+   token for token; the pixel tensors match exactly on the CPU and within 5e-4 when SGLang resizes on the GPU:
 
    ```bash
    STEP5_HF_CHECKPOINT=/scratch/step5_slices/step5-5layer pytest -s tests/manual/step5/test_processor_parity.py
@@ -132,7 +133,7 @@ The trainer recomputes the full-attention layers' region selection with the froz
        tests/manual/step5/indexer_inputs.py \
        $(python miles/utils/external_utils/model_args_utils.py step5-5layer) \
        --hf-checkpoint /scratch/step5_slices/step5-5layer \
-       --load /scratch/step5_ckpt_dist/Step5-5layer_torch_dist --no-load-optim --no-load-rng \
+       --load /scratch/step5_slices/Step5-5layer_torch_dist --no-load-optim --no-load-rng \
        --text-files 'docs/**/*.md' '/root/Megatron-LM/megatron/core/**/*.py' \
        --out /scratch/step5_golden/indexer_inputs.pt
    ```
@@ -143,9 +144,9 @@ The trainer recomputes the full-attention layers' region selection with the froz
     paths, DeepSelect) and StepFun's reference on those inputs, per full-attention layer of the slice:
 
     ```bash
-    CUDA_VISIBLE_DEVICES=1 PYTHONPATH=$PWD:/root/Megatron-LM:/sgl-workspace/sglang/python \
+    PYTHONPATH=$PWD:/root/Megatron-LM:/sgl-workspace/sglang/python \
         python tests/manual/step5/indexer_parity.py --hf-checkpoint /scratch/step5_slices/step5-5layer \
-        --inputs /scratch/step5_golden/indexer_inputs.pt --layers 3 7 \
+        --inputs /scratch/step5_golden/indexer_inputs.pt --layers 1 4 \
         --ref-code /scratch/step5_ref_code --report /scratch/step5_golden/indexer_parity.json
     ```
 
@@ -191,14 +192,14 @@ full-layer recompute selects the forward's regions bit for bit.
 
     These timings predate the trainer's CUDA head-weight kernel and were not remeasured after that change.
 
-To benchmark only the attention kernel, use a captured `[T, 4, 513]` region-id tensor:
+To benchmark only the attention kernel:
 
 ```bash
-python tests/manual/step5/bench_sparse_region_attention.py --tokens 4096 16384 32768 \
-    --groups 1 2 4 --selection /scratch/step5_golden/region_ids.pt
+python tests/manual/step5/bench_sparse_region_attention.py --tokens 4096 16384 32768 --groups 1 2 4
 ```
 
-Without `--selection`, the benchmark samples earlier regions with a bias toward recent tokens. Dense causal
+`--selection <file>` replays a captured selection instead: a torch file whose `region_ids` is an int32
+`[T, G, 513]` tensor (no script here writes one). Without it, the benchmark samples earlier regions with a bias toward recent tokens. Dense causal
 attention is equivalent only when every earlier region is selected; it is a timing baseline for longer sparse
 sequences. Layer benchmarks report the indexer, full attention, kernel-only attention, and recomputation costs
 separately, as CUDA-event medians and peak-memory increments above the resident weights and inputs.

@@ -1,7 +1,12 @@
-"""Expand rollout media placeholders into the token layout consumed by training.
+"""Multimodal-specific preprocessing for rollout data.
 
-Kimi and Inkling expand per-item placeholders; Step5 replaces the request prompt
-with the engine-expanded prompt. Generic batching and CP slicing remain in `data.py`.
+The rollout side emits one media placeholder/sentinel per media item; training
+expands it to the per-item token count so the LM sees a position per vision
+patch / audio frame. Three families live here: Kimi-VL / Kimi-K2.5 (grid-derived
+expansion of an in-vocab placeholder), Inkling (out-of-vocab sentinels expanded
+to in-vocab placeholder runs with explicit positions) and Step5 (the prompt the
+engine expanded, swapped in whole). Kept separate from data.py (generic batching /
+CP slicing).
 """
 
 import logging

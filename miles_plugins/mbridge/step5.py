@@ -89,8 +89,11 @@ class Step5Bridge(LLMBridge):
         return getattr(self.hf_config, "text_config", self.hf_config)
 
     def _build_config(self):
+        # The same model scripts/models/step5.py describes on the command line, so a config built
+        # here alone (bridge.get_model) routes and windows attention as the checkpoint does.
         text_config = self.text_config
         moe_layers = set(text_config.moe_layer_list)
+        layer_types = text_config.layer_types[: text_config.num_hidden_layers]
         return self._build_base_config(
             text_config_key="text_config" if self.text_config is not self.hf_config else None,
             attention_dropout=0.0,
@@ -105,6 +108,16 @@ class Step5Bridge(LLMBridge):
             moe_layer_freq=[int(index in moe_layers) for index in range(text_config.num_hidden_layers)],
             moe_grouped_gemm=True,
             moe_router_dtype="fp32",
+            moe_router_score_function="sigmoid",
+            moe_router_enable_expert_bias=True,
+            moe_router_bias_update_rate=0.0,
+            moe_router_load_balancing_type="none",
+            moe_aux_loss_coeff=0.0,
+            moe_router_topk_scaling_factor=text_config.moe_router_scaling_factor,
+            moe_combine_in_fp32=True,
+            # a 512-token window is the query plus 511 before it; a 1 in the skip list selects the window
+            window_size=(text_config.sliding_window - 1, 0),
+            window_attn_skip_freq=[int(kind == "sliding_attention") for kind in layer_types],
         )
 
     def _get_gptmodel_args(self) -> dict:
