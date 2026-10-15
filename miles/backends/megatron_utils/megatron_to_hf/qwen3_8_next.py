@@ -5,6 +5,9 @@ delegates to ``convert_qwen3_5_to_hf``.
 """
 
 import re
+from argparse import Namespace
+
+import torch
 
 from .qwen3_5 import convert_qwen3_5_to_hf
 
@@ -44,7 +47,9 @@ _HF_LAYOUT_GDN = ("self_attention.linear_attn.in_proj_qkv.weight", "self_attenti
 _LAYER_PATTERN = re.compile(r"module\.module\.decoder\.layers\.(\d+)\.(.+)")
 
 
-def convert_qwen3_8_next_to_hf(args, name, param):
+def convert_qwen3_8_next_to_hf(
+    args: Namespace, name: str, param: torch.Tensor, *, hf_checkpoint: str
+) -> list[tuple[str, torch.Tensor]]:
     if name in _HEAD_CONTRACTION_MAPPING:
         return [(_HEAD_CONTRACTION_MAPPING[name], param)]
 
@@ -58,4 +63,4 @@ def convert_qwen3_8_next_to_hf(args, name, param):
             hf_rest = rest[len("self_attention.") :]
             return [(f"model.language_model.layers.{layer_idx}.{hf_rest}", param)]
 
-    return convert_qwen3_5_to_hf(args, name, param)
+    return convert_qwen3_5_to_hf(args, name, param, hf_checkpoint=hf_checkpoint)

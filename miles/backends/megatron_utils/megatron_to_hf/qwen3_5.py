@@ -1,11 +1,14 @@
 import re
+from argparse import Namespace
 
 import torch
 
 from miles.backends.megatron_utils.megatron_to_hf.linear_attn_layout import gdn_heads_of, qkv_group_major_to_flat
 
 
-def _convert_mtp_layer(args, name, param, layer_idx):
+def _convert_mtp_layer(
+    args: Namespace, name: str, param: torch.Tensor, layer_idx: str, *, hf_checkpoint: str
+) -> list[tuple[str, torch.Tensor]] | None:
     """Convert MTP layer parameters from Megatron to HuggingFace format."""
     if "enorm.weight" in name:
         return [("mtp.pre_fc_norm_embedding.weight", param)]
@@ -19,7 +22,7 @@ def _convert_mtp_layer(args, name, param, layer_idx):
     _mtp_inner = next((p for p in ("transformer_layer", "mtp_model_layer") if p in name), None)
     if _mtp_inner is not None:
         proxy_name = name.replace(f"mtp.layers.{layer_idx}.{_mtp_inner}", f"decoder.layers.{layer_idx}")
-        mapped_params = convert_qwen3_5_to_hf(args, proxy_name, param)
+        mapped_params = convert_qwen3_5_to_hf(args, proxy_name, param, hf_checkpoint=hf_checkpoint)
 
         final_params = []
         for hf_name, tensor in mapped_params:
@@ -34,7 +37,9 @@ def _convert_mtp_layer(args, name, param, layer_idx):
     return None
 
 
-def convert_qwen3_5_to_hf(args, name, param):
+def convert_qwen3_5_to_hf(
+    args: Namespace, name: str, param: torch.Tensor, *, hf_checkpoint: str
+) -> list[tuple[str, torch.Tensor]]:
     """Convert Qwen3.5 model parameters from Megatron to HuggingFace format.
 
     Qwen3.5 uses model.language_model.layers prefix and has separate
@@ -49,7 +54,7 @@ def convert_qwen3_5_to_hf(args, name, param):
         except (ValueError, IndexError) as e:
             raise ValueError(f"Invalid MTP layer name format: {name}") from e
 
-        result = _convert_mtp_layer(args, name, param, layer_idx)
+        result = _convert_mtp_layer(args, name, param, layer_idx, hf_checkpoint=hf_checkpoint)
         if result is not None:
             return result
 
@@ -172,7 +177,7 @@ def convert_qwen3_5_to_hf(args, name, param):
             return [(f"{prefix}.self_attn.k_norm.weight", param)]
         elif rest in ("self_attention.linear_attn.in_proj_qkv.weight", "self_attention.linear_attn.conv1d.weight"):
             hf_rest = rest[len("self_attention.") :]
-            return [(f"{prefix}.{hf_rest}", qkv_group_major_to_flat(param, gdn_heads_of(args.hf_checkpoint)))]
+            return [(f"{prefix}.{hf_rest}", qkv_group_major_to_flat(param, gdn_heads_of(hf_checkpoint)))]
         elif rest.startswith("self_attention.") and rest[len("self_attention.") :] in [
             "input_layernorm.weight",
             "linear_attn.A_log",

@@ -1,11 +1,14 @@
 import re
+from argparse import Namespace
 
 import torch
 
 from miles.backends.megatron_utils.megatron_to_hf.linear_attn_layout import gdn_heads_of, qkv_group_major_to_flat
 
 
-def convert_qwen3_next_to_hf(args, name, param):
+def convert_qwen3_next_to_hf(
+    args: Namespace, name: str, param: torch.Tensor, *, hf_checkpoint: str
+) -> list[tuple[str, torch.Tensor]]:
     if name == "module.module.embedding.word_embeddings.weight":
         return [("model.embed_tokens.weight", param)]
     if name == "module.module.output_layer.weight":
@@ -124,7 +127,7 @@ def convert_qwen3_next_to_hf(args, name, param):
             return [
                 (
                     f"model.layers.{layer_idx}.linear_attn.conv1d.weight",
-                    qkv_group_major_to_flat(param, gdn_heads_of(args.hf_checkpoint)),
+                    qkv_group_major_to_flat(param, gdn_heads_of(hf_checkpoint)),
                 )
             ]
         elif rest.startswith("self_attention.") and rest[len("self_attention.") :] in [
@@ -167,7 +170,7 @@ def convert_qwen3_next_to_hf(args, name, param):
         if rest.startswith(("transformer_layer.", "mtp_model_layer.")):
             transformer_rest = rest.split(".", 1)[1]
             proxy_name = f"module.module.decoder.layers.{layer_idx}.{transformer_rest}"
-            results = convert_qwen3_next_to_hf(args, proxy_name, param)
+            results = convert_qwen3_next_to_hf(args, proxy_name, param, hf_checkpoint=hf_checkpoint)
             return [
                 (hf_name.replace(f"model.layers.{layer_idx}", f"mtp.layers.{layer_idx}"), p) for hf_name, p in results
             ]

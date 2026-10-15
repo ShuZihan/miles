@@ -52,11 +52,13 @@ def _convert_to_hf_core(args, model_name, name, param):
     elif "qwen3moe" in model_name:
         converted_named_tensors = convert_qwen3moe_to_hf(args.backend, name, param)
     elif "qwen3next" in model_name:
-        converted_named_tensors = convert_qwen3_next_to_hf(args.backend, name, param)
+        converted_named_tensors = convert_qwen3_next_to_hf(args.backend, name, param, hf_checkpoint=args.hf_checkpoint)
     elif "qwen3_8_next" in model_name or "qwen4_exp" in model_name or "qwen3.8_next" in model_name:
-        converted_named_tensors = convert_qwen3_8_next_to_hf(args.backend, name, param)
+        converted_named_tensors = convert_qwen3_8_next_to_hf(
+            args.backend, name, param, hf_checkpoint=args.hf_checkpoint
+        )
     elif "qwen3_5" in model_name or "qwen3_6" in model_name:
-        converted_named_tensors = convert_qwen3_5_to_hf(args.backend, name, param)
+        converted_named_tensors = convert_qwen3_5_to_hf(args.backend, name, param, hf_checkpoint=args.hf_checkpoint)
     elif "qwen2" in model_name or "qwen3" in model_name:
         converted_named_tensors = convert_qwen2_to_hf(args.backend, name, param)
     elif "deepseekv41" in model_name:
