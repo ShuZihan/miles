@@ -60,7 +60,7 @@ def runtime_args() -> argparse.Namespace:
         moe_router_bias_update_rate=None,
         moe_aux_loss_coeff=None,
     )
-    return argparse.Namespace(backend=backend, dsa_attention_backend=None)
+    return argparse.Namespace(backend=backend, dsa_attention_backend=None, enable_mtp_training=False)
 
 
 @pytest.mark.parametrize(
@@ -94,8 +94,7 @@ def test_bridge_mtp_detachment(
     ids=["absent", "disabled", "enabled"],
 )
 def test_bridge_mtp_runtime_depth(apply_bridge_runtime_config, runtime_args, mtp_args, expected_layers):
-    del runtime_args.mtp_num_layers
-    vars(runtime_args).update(mtp_args)
+    vars(runtime_args.backend).update(mtp_args)
     provider = SimpleNamespace(mtp_num_layers=1)
 
     apply_bridge_runtime_config(provider, runtime_args)

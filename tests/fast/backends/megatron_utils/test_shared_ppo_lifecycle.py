@@ -111,7 +111,8 @@ def test_critic_train_wakes_and_leaves_offload_to_driver(actor_module, monkeypat
     worker.wake_up.assert_called_once_with()
     worker._train_critic.assert_called_once()
     worker.sleep.assert_not_called()
-    assert result is critic_output
+    assert result == critic_output
+    assert result.values is critic_output.values
     assert result.outcome is TrainStepOutcome.NORMAL
     assert result.values.inner == "cpu-values-ref"
     assert phases == ["data_preprocess", "critic_train"]
@@ -119,7 +120,8 @@ def test_critic_train_wakes_and_leaves_offload_to_driver(actor_module, monkeypat
 
 def test_actor_receives_critic_payload_and_leaves_offload_to_driver(actor_module, monkeypatch):
     worker = _worker(actor_module, "actor")
-    worker._train_actor = Mock(return_value=None)
+    actor_output = TrainStepOutput(outcome=TrainStepOutcome.NORMAL)
+    worker._train_actor = Mock(return_value=actor_output)
     monkeypatch.setattr(actor_module, "get_rollout_data", lambda **_kwargs: ({"tokens": []}, nullcontext()))
     monkeypatch.setattr(
         actor_module, "get_parallel_state", lambda: SimpleNamespace(train_parallel_config=make_train_parallel_config)
@@ -132,12 +134,12 @@ def test_actor_receives_critic_payload_and_leaves_offload_to_driver(actor_module
     worker._train_actor.assert_called_once()
     assert worker._train_actor.call_args.kwargs["external_data"] is values
     worker.sleep.assert_not_called()
-    assert result is None
+    assert result == actor_output
 
 
 def test_train_keeps_model_resident(actor_module, monkeypatch):
     worker = _worker(actor_module, "actor", asleep=False)
-    worker._train_actor = Mock(return_value=None)
+    worker._train_actor = Mock(return_value=TrainStepOutput(outcome=TrainStepOutcome.NORMAL))
     monkeypatch.setattr(actor_module, "get_rollout_data", lambda **_kwargs: ({"tokens": []}, nullcontext()))
     monkeypatch.setattr(
         actor_module, "get_parallel_state", lambda: SimpleNamespace(train_parallel_config=make_train_parallel_config)
@@ -853,6 +855,7 @@ class _RecordingWeightUpdater:
             info.rollout_engines,
             engine_gpu_counts=info.engine_gpu_counts,
             engine_gpu_offsets=info.engine_gpu_offsets,
+            engine_cell_ids=info.engine_cell_ids,
         )
         self.conn_status.mark_reconnected(info.snapshot_cell_id_to_hashes)
 

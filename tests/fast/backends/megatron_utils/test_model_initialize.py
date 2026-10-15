@@ -168,7 +168,12 @@ def _patch_initialize_side_effects(stack: ExitStack) -> None:
 def test_initialize_does_not_step_scheduler_restored_from_checkpoint():
     from miles.backends.megatron_utils.model import LoadCheckpointOutput, initialize_model_and_optimizer
 
-    args = make_trainer_config(use_checkpoint_opt_param_scheduler=True, global_batch_size=8, finetune=False)
+    args = make_trainer_config(
+        use_checkpoint_opt_param_scheduler=True,
+        global_batch_size=8,
+        finetune=False,
+        pretrained_checkpoint="/checkpoint",
+    )
     model = [_FakeModelChunk()]
     optimizer = object()
     opt_param_scheduler = MagicMock()
@@ -198,7 +203,12 @@ def test_initialize_does_not_step_scheduler_restored_from_checkpoint():
 def test_initialize_steps_scheduler_when_checkpoint_did_not_restore_it():
     from miles.backends.megatron_utils.model import LoadCheckpointOutput, initialize_model_and_optimizer
 
-    args = make_trainer_config(use_checkpoint_opt_param_scheduler=False, global_batch_size=8, finetune=False)
+    args = make_trainer_config(
+        use_checkpoint_opt_param_scheduler=False,
+        global_batch_size=8,
+        finetune=False,
+        pretrained_checkpoint="/checkpoint",
+    )
     model = [_FakeModelChunk()]
     optimizer = object()
     opt_param_scheduler = MagicMock()

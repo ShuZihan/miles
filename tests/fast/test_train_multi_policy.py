@@ -73,6 +73,9 @@ async def _run(
     if lifecycle_events is not None:
         context["rollout_executor"].dispose.side_effect = lambda: lifecycle_events.append("executor_dispose")
         context["inference_controller"].dispose.side_effect = lambda: lifecycle_events.append("inference_dispose")
+    multi_policy_driver.create_trainer_handles.return_value = {
+        config.trainer_id: infos[config.model_id].handle for config in args.raw_megatron.trainers
+    }
     multi_policy_driver.create_trainers.return_value = infos
     multi_policy_driver.create_rollout_components.return_value = (
         context["inference_controller"],
@@ -96,6 +99,7 @@ def _stub_driver_environment(monkeypatch):
         "assert_consistent_restore",
     ):
         monkeypatch.setattr(multi_policy_driver, name, lambda *a, **kw: None)
+    monkeypatch.setattr(multi_policy_driver, "create_trainer_handles", Mock())
     monkeypatch.setattr(multi_policy_driver, "create_trainers", AsyncMock(return_value={}))
     monkeypatch.setattr(multi_policy_driver, "create_rollout_components", AsyncMock())
 

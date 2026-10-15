@@ -58,10 +58,16 @@ def normalize_dsa_args(args: Namespace, hf_config) -> None:
     args.dsa_indexer_n_heads = hf_config.index_n_heads
     args.dsa_indexer_head_dim = hf_config.index_head_dim
     args.dsa_indexer_topk = hf_config.index_topk
-    args.dsa_indexer_rope_interleaved = bool(getattr(hf_config, "indexer_rope_interleave", False))  # config-access-exempt: HF indexer configurations may omit rotary interleaving
+    args.dsa_indexer_rope_interleaved = bool(
+        getattr(hf_config, "indexer_rope_interleave", False)
+    )  # config-access-exempt: HF indexer configurations may omit rotary interleaving
     args.indexer_rope_interleave = args.dsa_indexer_rope_interleaved
-    args.dsa_indexer_topk_freq = getattr(hf_config, "index_topk_freq", 1) or 1  # config-access-exempt: HF indexer configurations may omit top-k frequency
-    args.dsa_indexer_skip_topk_offset = getattr(hf_config, "index_skip_topk_offset", 0) or 0  # config-access-exempt: HF indexer configurations may omit the top-k skip offset
+    args.dsa_indexer_topk_freq = (
+        getattr(hf_config, "index_topk_freq", 1) or 1
+    )  # config-access-exempt: HF indexer configurations may omit top-k frequency
+    args.dsa_indexer_skip_topk_offset = (
+        getattr(hf_config, "index_skip_topk_offset", 0) or 0
+    )  # config-access-exempt: HF indexer configurations may omit the top-k skip offset
     # Match the existing raw indexer: no Hadamard rotation, fp32 key LayerNorm,
     # and no auxiliary indexer objective unless the user explicitly requests one.
     args.dsa_indexer_rotate_activation = False

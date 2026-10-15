@@ -1,5 +1,5 @@
 base: fsdp
-base_sha256: 4923b17ae28f74b89ceec00753e26c69ef179fddb0cd5d02774f7161a10bd421
+base_sha256: fcf15d6a01a91c8f875a2c1ead782318a1bdb9038cc947e3e0e6d65b92f97288
 edits:
 - at: 11
   delete: 0
@@ -14,11 +14,6 @@ edits:
   delete: 0
   insert: |2
         snapshot_hook: 23
-- at: 7750
-  delete: 2
-  insert: |2
-                ''mistral'', ''nemotron_3'', ''granite_thinking_parser'', ''interns1'', ''gemma4'', ''gigachat35'', ''inkling'',
-                ''iquest_q1'', ''cohere_command4''].'
 - at: 11666
   delete: 0
   insert: |2

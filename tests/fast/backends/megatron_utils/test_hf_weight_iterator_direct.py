@@ -270,7 +270,7 @@ def expert_parallel(direct_module, gather_log: _GatherLog, monkeypatch: pytest.M
 
 
 def _materialize_experts(direct_module) -> list[tuple[str, torch.Tensor]]:
-    return direct_module._materialize_expert_batch(
+    return direct_module._gather_megatron_expert_batch(
         Namespace(swiglu=False),
         [_expert_info(name) for name in _EXPERT_NAMES],
         {name: torch.full((2,), float(index)) for index, name in enumerate(_EXPERT_NAMES)},

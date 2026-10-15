@@ -44,7 +44,9 @@ class ReplicatedGatedDeltaNet(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
         # Qwen3.8-Next gates the output norm with sigmoid while hidden_act stays silu
-        self.output_gate_activation = getattr(config, "output_gate_type", None) or config.hidden_act  # config-access-exempt: HF GDN configurations may omit a distinct output gate activation
+        self.output_gate_activation = (
+            getattr(config, "output_gate_type", None) or config.hidden_act
+        )  # config-access-exempt: HF GDN configurations may omit a distinct output gate activation
         self.layer_norm_epsilon = config.rms_norm_eps
 
         # QKV

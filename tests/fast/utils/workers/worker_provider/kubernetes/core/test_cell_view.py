@@ -5,6 +5,7 @@ import pytest
 from miles.utils.workers.connection_config import WorkerPodMetadata
 from miles.utils.workers.naming import compute_worker_name
 from miles.utils.workers.worker_provider.kubernetes.core.cell_view import (
+    IncompleteCellWorkersError,
     PodIdentity,
     compute_cell_info,
     compute_debug_cell_incarnation,
@@ -242,12 +243,12 @@ class TestWorkerInfos:
 
     def test_refuses_a_cell_that_is_missing_a_pod(self):
         """Numbering workers off a gapped pod list would name workers that belong to another pod."""
-        with pytest.raises(AssertionError, match="missing pods"):
+        with pytest.raises(IncompleteCellWorkersError, match="missing pods"):
             build_worker_infos([make_parsed_pod(pod_in_cell_index=1)])
 
     def test_refuses_a_cell_still_missing_its_last_pod(self):
         """A prefix check alone passes a half-arrived group, and the tail is what is actually missing."""
-        with pytest.raises(AssertionError, match="missing pods"):
+        with pytest.raises(IncompleteCellWorkersError, match="missing pods"):
             build_worker_infos([make_parsed_pod(pod_in_cell_index=0, cell_size=2)])
 
 

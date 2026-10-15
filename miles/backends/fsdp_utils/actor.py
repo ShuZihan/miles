@@ -186,9 +186,13 @@ class FSDPTrainRayActor(TorchNativeTrainRayActor):
         return int(self.args.start_rollout_id)
 
     def _has_image_text_to_text_impl(self) -> bool:
-        if not hasattr(self.hf_config, "vision_config"):  # config-access-exempt: HF text-only configurations omit vision_config
+        if not hasattr(
+            self.hf_config, "vision_config"
+        ):  # config-access-exempt: HF text-only configurations omit vision_config
             return False
-        auto_map = getattr(self.hf_config, "auto_map", None)  # config-access-exempt: HF configurations without custom auto classes omit auto_map
+        auto_map = getattr(
+            self.hf_config, "auto_map", None
+        )  # config-access-exempt: HF configurations without custom auto classes omit auto_map
         return not auto_map or "AutoModelForImageTextToText" in auto_map
 
     def _get_model_cls(self):

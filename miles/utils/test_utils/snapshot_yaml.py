@@ -16,8 +16,8 @@ def dump_snapshot_yaml(value: JsonValue) -> str:
 def dump_snapshot_delta(*, base: str, actual: str, base_name: str) -> str:
     before, after = base.splitlines(keepends=True), actual.splitlines(keepends=True)
     edits = [
-        {"at": i, "delete": j - i, "insert": "".join(after[k:l])}
-        for tag, i, j, k, l in difflib.SequenceMatcher(a=before, b=after).get_opcodes()
+        {"at": i, "delete": j - i, "insert": "".join(after[start:end])}
+        for tag, i, j, start, end in difflib.SequenceMatcher(a=before, b=after).get_opcodes()
         if tag != "equal"
     ]
     result = dump_snapshot_yaml(

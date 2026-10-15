@@ -190,7 +190,9 @@ def _gather_export_dtypes(conversion_tasks):
     local_dtypes = {
         task.global_param_name: (
             torch.float32
-            if getattr(task.param_weight, "keep_in_fp32", False)  # config-access-exempt: Megatron annotates only parameters requiring float32 preservation
+            if getattr(
+                task.param_weight, "keep_in_fp32", False
+            )  # config-access-exempt: Megatron annotates only parameters requiring float32 preservation
             else task.param_weight.dtype
         )
         for task in conversion_tasks

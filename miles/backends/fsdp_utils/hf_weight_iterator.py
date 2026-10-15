@@ -16,7 +16,8 @@ class FSDPHfWeightIterator(HfWeightIteratorBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._sync_dtypes: dict[str, torch.dtype] = (
-            getattr(self.model, "_fsdp_sync_dtypes", None) or {}  # config-access-exempt: only mixed-precision FSDP models carry original sync dtypes
+            getattr(self.model, "_fsdp_sync_dtypes", None)
+            or {}  # config-access-exempt: only mixed-precision FSDP models carry original sync dtypes
         )
 
     def _iter_hf_param_units(self, weights, *, materialize):
@@ -54,7 +55,9 @@ class FSDPHfWeightIterator(HfWeightIteratorBase):
 
     def _hf_atomic_update_groups(self):
         return get_hf_atomic_update_groups(
-            self.model_name, q_lora_rank=getattr(self.model.config, "q_lora_rank", None) or None  # config-access-exempt: HF models without query LoRA omit q_lora_rank
+            self.model_name,
+            q_lora_rank=getattr(self.model.config, "q_lora_rank", None)
+            or None,  # config-access-exempt: HF models without query LoRA omit q_lora_rank
         )
 
     def _iter_hf_adapter_units(self, lora_name, adapter, *, materialize) -> Iterator:

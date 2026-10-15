@@ -164,7 +164,8 @@ def _make_trainer_args(*model_ids: str, **overrides: Any) -> AllConfig:
     return _parse_trainer_args(model_ids).model_copy(update=overrides)
 
 
-_CAPABILITY = object()
+def _trainer_handles() -> dict[str, AsyncMock]:
+    return {trainer_id: AsyncMock() for trainer_id in ("a-actor", "b-actor")}
 
 
 class TestCreatePolicyTrainers:
@@ -189,12 +190,7 @@ class TestCreatePolicyTrainers:
                 handle=handle, start_rollout_id=start_rollout_ids[trainer_id.removesuffix("-actor")]
             )
 
-        def _create_trainer_handles(args, *, trainer_configs, capability):
-            assert capability is _CAPABILITY
-            return {config.trainer_id: AsyncMock() for config in trainer_configs}
-
         monkeypatch.setattr(multi_policy_utils, "create_training_model", _create)
-        monkeypatch.setattr(multi_policy_utils, "create_trainer_handles", _create_trainer_handles)
         monkeypatch.setattr(multi_policy_utils, "take_over_trainers", AsyncMock(return_value=resumed))
         return created
 
@@ -203,9 +199,11 @@ class TestCreatePolicyTrainers:
         created = self._stub_create_training_model(monkeypatch, dict(a=0, b=0))
         args = _make_trainer_args("a", "b")
 
-        trainers = await multi_policy_utils.create_trainers(args, rollout_executor=AsyncMock(), capability=_CAPABILITY)
+        handles = _trainer_handles()
+        trainers = await multi_policy_utils.create_trainers(args, rollout_executor=AsyncMock(), handles=handles)
 
         assert [entry["trainer_id"] for entry in created] == ["a-actor", "b-actor"]
+        assert [entry["handle"] for entry in created] == list(handles.values())
         assert [entry["request"] for entry in created] == [
             TrainerControllerInitRequest.from_args(args, trainer=trainer) for trainer in args.raw_megatron.trainers
         ]
@@ -219,7 +217,7 @@ class TestCreatePolicyTrainers:
         self._stub_create_training_model(monkeypatch, dict(a=4, b=2))
 
         trainers = await multi_policy_utils.create_trainers(
-            _make_trainer_args("a", "b"), rollout_executor=AsyncMock(), capability=_CAPABILITY
+            _make_trainer_args("a", "b"), rollout_executor=AsyncMock(), handles=_trainer_handles()
         )
 
         assert {model_id: trainer.start_rollout_id for model_id, trainer in trainers.items()} == dict(a=4, b=2)
@@ -230,7 +228,7 @@ class TestCreatePolicyTrainers:
         rollout_executor = AsyncMock()
 
         await multi_policy_utils.create_trainers(
-            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, capability=_CAPABILITY
+            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, handles=_trainer_handles()
         )
 
         assert [
@@ -244,7 +242,7 @@ class TestCreatePolicyTrainers:
         rollout_executor = AsyncMock()
 
         await multi_policy_utils.create_trainers(
-            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, capability=_CAPABILITY
+            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, handles=_trainer_handles()
         )
 
         rollout_executor.load.assert_awaited_once_with(3, load=None)
@@ -255,7 +253,7 @@ class TestCreatePolicyTrainers:
         rollout_executor = AsyncMock()
 
         await multi_policy_utils.create_trainers(
-            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, capability=_CAPABILITY
+            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, handles=_trainer_handles()
         )
 
         rollout_executor.load.assert_awaited_once_with(1, load=None)
@@ -266,7 +264,7 @@ class TestCreatePolicyTrainers:
         rollout_executor = AsyncMock()
 
         await multi_policy_utils.create_trainers(
-            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, capability=_CAPABILITY
+            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, handles=_trainer_handles()
         )
 
         assert [entry["resumed"] for entry in created] == [True, True]
@@ -278,7 +276,7 @@ class TestCreatePolicyTrainers:
         rollout_executor = AsyncMock()
 
         await multi_policy_utils.create_trainers(
-            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, capability=_CAPABILITY
+            _make_trainer_args("a", "b"), rollout_executor=rollout_executor, handles=_trainer_handles()
         )
 
         rollout_executor.load.assert_not_awaited()
@@ -289,7 +287,9 @@ class TestCreatePolicyTrainers:
 
         with pytest.raises(AssertionError, match="rollout/3 is missing"):
             await multi_policy_utils.create_trainers(
-                _make_trainer_args("a", "b", load=str(tmp_path)), rollout_executor=AsyncMock(), capability=_CAPABILITY
+                _make_trainer_args("a", "b", load=str(tmp_path)),
+                rollout_executor=AsyncMock(),
+                handles=_trainer_handles(),
             )
 
     async def test_a_resume_with_the_global_rollout_state_loads_it(self, monkeypatch, tmp_path):
@@ -299,7 +299,9 @@ class TestCreatePolicyTrainers:
         rollout_executor = AsyncMock()
 
         await multi_policy_utils.create_trainers(
-            _make_trainer_args("a", "b", load=str(tmp_path)), rollout_executor=rollout_executor, capability=_CAPABILITY
+            _make_trainer_args("a", "b", load=str(tmp_path)),
+            rollout_executor=rollout_executor,
+            handles=_trainer_handles(),
         )
 
         rollout_executor.load.assert_awaited_once_with(3, load=str(tmp_path))
@@ -310,7 +312,7 @@ class TestCreatePolicyTrainers:
 
         with pytest.raises(AssertionError, match="carries no policy model id"):
             await multi_policy_utils.create_trainers(
-                _make_trainer_args(), rollout_executor=AsyncMock(), capability=_CAPABILITY
+                _make_trainer_args(), rollout_executor=AsyncMock(), handles=_trainer_handles()
             )
 
 

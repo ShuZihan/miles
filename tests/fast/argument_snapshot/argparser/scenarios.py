@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import os
 import sys
 from collections.abc import Iterator
@@ -20,6 +21,8 @@ class _Scenario:
 
 
 def capture_scenarios(selected: list[str] | None = None) -> dict[str, Any]:
+    importlib.import_module("sglang.srt.parser.reasoning_parser")
+
     scenarios = {
         "megatron": _Scenario(backend="megatron"),
         "fsdp": _Scenario(backend="fsdp"),

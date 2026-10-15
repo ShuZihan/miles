@@ -15,6 +15,7 @@ from miles.utils.workers.k8s_types import Pod
 from miles.utils.workers.reconcile.k8s_api import PodListPage, PodWatchEvent
 from miles.utils.workers.rpc.client.handle import RpcWorkerHandle
 from miles.utils.workers.worker_provider.kubernetes.core import provider as core_provider
+from miles.utils.workers.worker_provider.kubernetes.core.cell_view import IncompleteCellWorkersError
 from miles.utils.workers.worker_provider.kubernetes.core.provider import KubernetesRunInfo, KubernetesWorkerProvider
 from miles.utils.workers.worker_provider.kubernetes.helm.env import DEFAULT_LABEL_KEYS
 from miles.utils.workers.worker_provider.utils import build_rpc_handle_of_worker_info
@@ -685,12 +686,12 @@ class TestGetWorkerInfos:
         """Driving half a cell would let the missing ranks' collective hang the whole run."""
         api = FakePodApi(pods=[make_pod(name="engine-0-1", pod_in_cell_index="1")])
 
-        with pytest.raises(AssertionError, match="missing pods"):
+        with pytest.raises(IncompleteCellWorkersError, match="missing pods"):
             _worker_infos(_trainer_provider(api))
 
     def test_refuses_a_cell_it_has_never_observed(self):
         """Returning no workers would read as a cell with nothing to do rather than as an error."""
-        with pytest.raises(AssertionError, match="no observed worker pods"):
+        with pytest.raises(IncompleteCellWorkersError, match="no observed worker pods"):
             _worker_infos(_trainer_provider(FakePodApi()), cell_id="engine-00009")
 
     def test_a_worker_that_is_not_served_names_no_class_and_refuses_a_handle(self):

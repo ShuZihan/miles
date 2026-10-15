@@ -1,5 +1,5 @@
 base: megatron
-base_sha256: 110c6f03505a8623d99e4bb88e022a5fddaf9c30e20f980808cdcc9835375e63
+base_sha256: c2333e7382a0e923f61cfb54fe8f7323695f684b3f708cf9bac18d9849a5929b
 edits:
 - at: 17
   delete: 1
@@ -15,11 +15,6 @@ edits:
   delete: 0
   insert: |2
         snapshot_hook: 23
-- at: 14594
-  delete: 2
-  insert: |2
-                ''mistral'', ''nemotron_3'', ''granite_thinking_parser'', ''interns1'', ''gemma4'', ''gigachat35'', ''inkling'',
-                ''iquest_q1'', ''cohere_command4''].'
 - at: 18507
   delete: 0
   insert: |2

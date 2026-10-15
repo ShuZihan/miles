@@ -41,7 +41,9 @@ def apply_dsa_backend_args(provider, args) -> None:
     explicit = getattr(
         args.backend, "dsa_kernel_backend", None
     )  # config-access-exempt: older Megatron parsers omit the DSA kernel backend switch
-    if getattr(provider, "experimental_attention_variant", None) == "dsv4_hybrid":  # config-access-exempt: Megatron providers without experimental attention omit this field
+    if (
+        getattr(provider, "experimental_attention_variant", None) == "dsv4_hybrid"
+    ):  # config-access-exempt: Megatron providers without experimental attention omit this field
         provider.dsa_kernel_backend = explicit or "cudnn"
         return
 

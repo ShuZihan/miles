@@ -4,7 +4,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from tests.fast.fixtures.args_fixtures import parse_megatron_test_config
+from tests.fast.fixtures.args_fixtures import make_trainer_config, parse_megatron_test_config
 from tests.fast.train_parallel_config_utils import make_train_parallel_config
 
 from miles.ray import placement_group, train_actor
@@ -136,11 +136,6 @@ class TestTrainParallelConfigWiring:
         actor_handle = FakeActorHandle()
         rollout_executor = FakeRolloutExecutor()
         monkeypatch.setattr(placement_group, "compute_trainer_configs", lambda args: [trainer_config])
-        monkeypatch.setattr(
-            placement_group,
-            "create_trainer_handles",
-            lambda args, *, trainer_configs, capability: {trainer_config.trainer_id: actor_handle},
-        )
         monkeypatch.setattr(placement_group, "take_over_trainers", lambda args, *, handles: _return(False))
         monkeypatch.setattr(
             placement_group,
@@ -153,7 +148,7 @@ class TestTrainParallelConfigWiring:
         await placement_group.create_training_models(
             args,
             rollout_executor=rollout_executor,
-            capability=object(),
+            handles={trainer_config.trainer_id: actor_handle},
         )
 
         assert rollout_executor.received_config is train_parallel_config
@@ -336,11 +331,10 @@ class _FakeNvml:
 class TestNumaAffinity:
     def test_a_masked_rank_takes_the_cpus_of_the_gpu_it_runs_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Under mask 4,5,6,7 local rank 0 runs on GPU 4, so it must take GPU 4's NUMA node, not GPU 0's."""
-        args = SimpleNamespace(
+        args = make_trainer_config(
             debug_deterministic_collective=False,
             distributed_backend="nccl",
             distributed_timeout_minutes=1,
-            fsdp_cpu_offload=False,
             num_gpus_per_node=4,
         )
         actor = _ActorWithoutReloadSupport.__new__(_ActorWithoutReloadSupport)

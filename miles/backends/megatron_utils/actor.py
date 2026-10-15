@@ -255,9 +255,7 @@ class MegatronTrainRayActor(TrainRayActor):
                 self.args.backend.vocab_size = self.tokenizer.vocab_size
 
         with ckpt_load_config.apply(args.backend):
-            load_output = self._load_state_core(
-                checkpointing_context=checkpointing_context, overrider_for_loading={}
-            )
+            load_output = self._load_state_core(checkpointing_context=checkpointing_context, overrider_for_loading={})
 
         self._init_training_state()
 

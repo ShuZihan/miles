@@ -25,7 +25,11 @@ def _test_files_calling_ray_init() -> list[Path]:
     # Snapshot fixtures include directories named like modules, and the launch scripts
     # recorded under them are rendered output rather than code this suite runs.
     candidates = (path for path in _TESTS_ROOT.rglob("*.py") if path.is_file())
-    return [path for path in candidates if not any(root in path.parents for root in _SNAPSHOTS_ROOTS) and _calls_ray_init(path)]
+    return [
+        path
+        for path in candidates
+        if not any(root in path.parents for root in _SNAPSHOTS_ROOTS) and _calls_ray_init(path)
+    ]
 
 
 def _calls_ray_init(path: Path) -> bool:

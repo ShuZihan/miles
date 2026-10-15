@@ -137,7 +137,9 @@ def _patch_attn_forward(attn_cls):
         cache = kwargs.get("past_key_values", kwargs.get("cache_params"))
         # A hub kernel bound on the instance wins over the flash-attn wheel; without either,
         # the packed-document reset below cannot run and attention goes dense across documents.
-        varlen_func = getattr(self, HUB_VARLEN_ATTR, None) or native_varlen_func  # config-access-exempt: optional hub kernel is attached to the attention instance at runtime
+        varlen_func = (
+            getattr(self, HUB_VARLEN_ATTR, None) or native_varlen_func
+        )  # config-access-exempt: optional hub kernel is attached to the attention instance at runtime
         if cu is None or cache is not None or varlen_func is None:
             return orig(self, hidden_states, *args, **kwargs)
         # Packed rows arrive as (1, total_tokens, hidden); flash varlen consumes flat

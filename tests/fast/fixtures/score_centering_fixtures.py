@@ -4,6 +4,8 @@ from argparse import Namespace
 
 import numpy as np
 
+from miles.backends.megatron_utils.megatron_config import MegatronArgsNamespace
+from miles.backends.sglang_utils.sglang_config import SglangConfig
 from miles.rollout.generate_utils.rollout_topk_logprobs import append_rollout_topk_logprobs
 from miles.utils.types import Sample
 
@@ -28,6 +30,9 @@ def _args(**overrides: object) -> Namespace:
         sglang_speculative_algorithm=None,
         custom_pg_loss_reducer_function_path=None,
         multi_lora=False,
+        lora_rank=0,
+        lora_adapter_path=None,
+        lora_train_only=False,
         custom_convert_samples_to_train_data_path=None,
         opd_log_prob_top_k=0,
         opd_top_k_strategy="only-student",
@@ -39,6 +44,8 @@ def _args(**overrides: object) -> Namespace:
         rollout_top_p=1.0,
         rollout_top_k=-1,
         use_sampling_support_replay=False,
+        use_rollout_routing_replay=False,
+        use_rollout_indexer_replay=False,
         advantage_estimator="grpo",
         rewards_normalization=False,
         reward_key=None,
@@ -49,13 +56,18 @@ def _args(**overrides: object) -> Namespace:
         allgather_cp=False,
         log_probs_chunk_size=2,
         vocab_size=8,
+        calculate_per_token_loss=False,
+        global_batch_size=1,
         entropy_coef=0,
         observe_training_entropy=False,
         use_kl_loss=False,
     )
     values.update(overrides)
-    backend = Namespace(vocab_size=values.pop("vocab_size"))
-    return Namespace(**values, train_backend="megatron", backend=backend)
+    backend = MegatronArgsNamespace(
+        **{name: values.pop(name) for name in ("vocab_size", "calculate_per_token_loss", "global_batch_size")}
+    )
+    sglang = SglangConfig(models=[], base_args={"speculative_algorithm": values["sglang_speculative_algorithm"]})
+    return Namespace(**values, train_backend="megatron", backend=backend, sglang=sglang)
 
 
 def _turn(prompt: list[int], output: list[int], probabilities: list[float]) -> Sample:

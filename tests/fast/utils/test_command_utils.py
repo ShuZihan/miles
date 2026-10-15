@@ -10,9 +10,11 @@ import pytest
 from tests.fast.launch_scripts.py_harness import launcher_hardware_literals
 from tests.fast.utils.command_recorder import patch_helper, record_commands
 
-
 import miles.utils.external_utils.command_utils as command_utils
-from miles.utils.audit_utils.config_snapshot.generated_value_registry import GENERATED_VALUES_ENV_VAR, generated_value_registry
+from miles.utils.audit_utils.config_snapshot.generated_value_registry import (
+    GENERATED_VALUES_ENV_VAR,
+    generated_value_registry,
+)
 from miles.utils.external_utils.command_utils import base_backend, common
 from miles.utils.external_utils.command_utils.base_backend import ExecuteTrainRequest
 from miles.utils.external_utils.command_utils.ray_backend import command as ray_command
@@ -850,7 +852,9 @@ class TestBuildTrainEnvVars:
         env = common.train_env_vars(self._request(), {"MASTER_ADDR": "10.0.0.1"}, config=config)
 
         assert [(value.kind, value.value) for value in generated_value_registry.read()] == [("run_id", config.run_id)]
-        assert json.loads(env[GENERATED_VALUES_ENV_VAR]) == [value.model_dump() for value in generated_value_registry.read()]
+        assert json.loads(env[GENERATED_VALUES_ENV_VAR]) == [
+            value.model_dump() for value in generated_value_registry.read()
+        ]
         assert list(env) == [
             "PYTHONUNBUFFERED",
             "MILES_UPDATE_SNAPSHOTS",

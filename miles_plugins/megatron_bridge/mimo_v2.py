@@ -173,7 +173,9 @@ class MiMoV2Bridge(MegatronModelBridge):
 
     def provider_bridge(self, hf_pretrained) -> MiMoV2ModelProvider:
         hf = hf_pretrained.config
-        if getattr(hf, "attention_projection_layout", "split") != "split" or getattr(  # config-access-exempt: unquantized HF checkpoints omit quantization_config; HF MiMo checkpoints may omit the projection layout marker
+        if getattr(
+            hf, "attention_projection_layout", "split"
+        ) != "split" or getattr(  # config-access-exempt: unquantized HF checkpoints omit quantization_config; HF MiMo checkpoints may omit the projection layout marker
             hf, "quantization_config", None
         ):  # config-access-exempt: unquantized HF checkpoints omit quantization_config; HF MiMo checkpoints may omit the projection layout marker
             raise ValueError(
@@ -185,7 +187,9 @@ class MiMoV2Bridge(MegatronModelBridge):
             ("swa_head_dim", "head_dim"),
             ("swa_v_head_dim", "v_head_dim"),
         ):
-            assert getattr(hf, swa_key) == getattr(  # config-access-exempt: HF sliding-window field name is selected from the explicit compatibility pairs; HF full-attention field name is selected from the explicit compatibility pairs
+            assert getattr(
+                hf, swa_key
+            ) == getattr(  # config-access-exempt: HF sliding-window field name is selected from the explicit compatibility pairs; HF full-attention field name is selected from the explicit compatibility pairs
                 hf, full_key
             ), f"{swa_key} must equal {full_key}"  # config-access-exempt: HF sliding-window field name is selected from the explicit compatibility pairs; HF full-attention field name is selected from the explicit compatibility pairs
 
@@ -226,7 +230,10 @@ class MiMoV2Bridge(MegatronModelBridge):
         provider.moe_router_load_balancing_type = "none"
         provider.moe_aux_loss_coeff = 0.0
         provider.moe_router_dtype = "fp32"
-        if getattr(hf, "n_group", None) in (None, 1):  # config-access-exempt: HF configurations without grouped expert routing omit n_group
+        if getattr(hf, "n_group", None) in (
+            None,
+            1,
+        ):  # config-access-exempt: HF configurations without grouped expert routing omit n_group
             provider.moe_router_num_groups = None
             provider.moe_router_group_topk = None
         provider.mtp_num_layers = None

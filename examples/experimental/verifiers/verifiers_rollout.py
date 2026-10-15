@@ -676,9 +676,7 @@ class VerifiersRolloutFn(BaseRolloutFn):
         self._next_sample_index = 0
 
     @staticmethod
-    def _sampling_config(
-        SamplingConfig: Any, args: Namespace | ImmutableNamespace, *, min_tokens: int | None
-    ) -> Any:
+    def _sampling_config(SamplingConfig: Any, args: Namespace | ImmutableNamespace, *, min_tokens: int | None) -> Any:
         data: dict[str, Any] = {
             "temperature": args.rollout_temperature,
             "top_p": args.rollout_top_p,

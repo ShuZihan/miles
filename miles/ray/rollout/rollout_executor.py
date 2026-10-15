@@ -363,7 +363,9 @@ class RolloutExecutor:
 
     # async but never awaits, for the same reason as save
     async def load(self, rollout_id: int, *, load: str | None) -> None:
-        assert not hasattr(self.args, "load"), "Rollout checkpoint load path must be a runtime input"
+        assert not hasattr(  # config-access-exempt: reject checkpoint load paths in immutable rollout config
+            self.args, "load"
+        ), "Rollout checkpoint load path must be a runtime input"
         if load is None:
             logger.warning("no --load: the rollout side starts fresh")
             return

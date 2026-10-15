@@ -918,9 +918,7 @@ class TestCheckpointWithoutARolloutFunction:
         """A run without --load names no checkpoint directory, so there is nothing for the data source to read."""
         monkeypatch.delenv("MILES_USE_LEGACY_ROLLOUT_V1", raising=False)
         executor = await _make_executor(
-            _make_test_args(
-                save=str(tmp_path), load_debug_rollout_data="/nonexistent/rollout_{rollout_id}.pt"
-            )
+            _make_test_args(save=str(tmp_path), load_debug_rollout_data="/nonexistent/rollout_{rollout_id}.pt")
         )
         executor.data_source = MagicMock()
 

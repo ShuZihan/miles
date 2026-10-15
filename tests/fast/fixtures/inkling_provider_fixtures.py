@@ -95,7 +95,6 @@ def inkling_tower_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Simple
     (tmp_path / "model.safetensors.index.json").write_text(
         json.dumps({"weight_map": {name: "model.safetensors" for name in tensors}})
     )
-    monkeypatch.setattr(hf_weight_iterator, "_MM_TOWER_CACHE", None)
     monkeypatch.setattr(torch.cuda, "current_device", lambda: "cpu")
     return SimpleNamespace(module=hf_weight_iterator, checkpoint=tmp_path, tensors=tensors)
 

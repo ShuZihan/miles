@@ -147,6 +147,7 @@ def make_args(**overrides: Any) -> Namespace:
         seed=42,
         fp16=False,
         use_rollout_indexer_replay=False,
+        rollout_indexer_topk_num_streams=None,
         env_report_interval_seconds=3600.0,
         # checkpoint / data source
         hf_checkpoint="/fake/model",

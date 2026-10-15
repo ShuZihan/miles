@@ -1,5 +1,5 @@
 base: megatron
-base_sha256: 110c6f03505a8623d99e4bb88e022a5fddaf9c30e20f980808cdcc9835375e63
+base_sha256: c2333e7382a0e923f61cfb54fe8f7323695f684b3f708cf9bac18d9849a5929b
 edits:
 - at: 4
   delete: 1
@@ -540,7 +540,6 @@ edits:
 - at: 9493
   delete: 1
   insert: |2
-          - {default: null, dest: load, group: options, help: null, option_strings: [--load], type: {$callable: builtins.str}}
           - {default: null, dest: save, group: options, help: null, option_strings: [--save], type: {$callable: builtins.str}}
           - {default: null, dest: save_interval, group: options, help: null, option_strings: [--save-interval], type: {$callable: builtins.int}}
           - {action: *id002, const: true, default: false, dest: async_save, group: options, help: null, nargs: 0, option_strings: [
@@ -2961,6 +2960,10 @@ edits:
   delete: 1
   insert: |2
           - action: *id002
+- at: 18499
+  delete: 0
+  insert: |2
+          - {default: null, dest: load, group: options, help: null, option_strings: [--load], type: {$callable: builtins.str}}
 - at: 18524
   delete: 1
   insert: |2

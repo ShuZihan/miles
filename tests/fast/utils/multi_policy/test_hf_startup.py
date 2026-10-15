@@ -3,7 +3,6 @@ from typing import cast
 from tests.fast.utils.multi_policy.conftest import _FreshPolicyStartup
 
 from miles.utils.multi_policy.utils import assert_consistent_restore, create_trainers
-from miles.utils.workers.backend_capability.base import BackendCapability
 from miles.utils.workers.worker_handle import BaseWorkerHandle
 
 
@@ -20,7 +19,7 @@ class TestFreshMultiPolicyStartup:
         trainers = await create_trainers(
             startup.args,
             rollout_executor=cast(BaseWorkerHandle, startup.rollout),
-            capability=cast(BackendCapability, None),
+            handles=startup.handles,
         )
         assert_consistent_restore(startup.args, trainers=trainers, leader_model_id="solver")
 

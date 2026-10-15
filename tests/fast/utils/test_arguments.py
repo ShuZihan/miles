@@ -638,6 +638,7 @@ class TestMaybeApplyDumperOverrides:
     ) -> SimpleNamespace:
         return SimpleNamespace(
             dumper_enable=dumper_enable,
+            train_backend="megatron",
             use_fault_tolerance=use_fault_tolerance,
             ft_components=ft_components if ft_components is not None else [],
             mini_ft_controller_enable=None,
@@ -671,11 +672,8 @@ class TestMaybeApplyDumperOverrides:
 
     def test_disables_fault_tolerance_and_sglang_router_heartbeats(self) -> None:
         """Dumper mode turns off fault tolerance and the SGLang router health check."""
-        args = self._make_args(
-            dumper_enable=True,
-            use_fault_tolerance=True,
-        )
-        _maybe_apply_dumper_overrides(args)
+        args = _parse_megatron_args(["--dumper-enable", "--use-fault-tolerance"])
+        miles_validate_args(args)
 
         assert args.use_fault_tolerance is False
         assert args.router_disable_health_check is True
@@ -683,18 +681,20 @@ class TestMaybeApplyDumperOverrides:
     def test_no_healing_loop_survives_dumper_mode(self) -> None:
         """It is resolved from ft_components, which dumper mode clears, so resolving it first
         would leave the loop polling a registry with nothing in it for the whole run."""
-        args = self._make_args(dumper_enable=True, use_fault_tolerance=True, ft_components=["rollout"])
+        args = _parse_megatron_args(["--dumper-enable", "--use-fault-tolerance", "--ft-components", "rollout"])
 
-        _maybe_apply_dumper_overrides(args)
+        miles_validate_args(args)
 
         assert _resolve_mini_ft_controller_enable(args) is False
 
     def test_the_selected_ft_components_go_with_the_flag(self) -> None:
         """ft_components is resolved from the flag long before this runs, so clearing the flag
         alone would leave every component selected and its probes still firing."""
-        args = self._make_args(dumper_enable=True, use_fault_tolerance=True, ft_components=["rollout", "train"])
+        args = _parse_megatron_args(
+            ["--dumper-enable", "--use-fault-tolerance", "--ft-components", "rollout", "train"]
+        )
 
-        _maybe_apply_dumper_overrides(args)
+        miles_validate_args(args)
 
         assert args.ft_components == []
 
@@ -1197,6 +1197,7 @@ def test_sglang_parallel_sizes_keep_server_args_destinations():
     args.rollout_num_gpus_per_engine = 8
     args.true_on_policy_mode = False
     args.sglang_enable_dp_attention = True
+    args.loss_type = "policy_loss"
     args.use_session_server = False
     args.recompute_logprobs_via_prefill = False
 
@@ -2843,6 +2844,7 @@ def test_sglang_parallel_sizes_use_short_namespace_fields(parallel_args, expecte
     args.true_on_policy_mode = False
     args.recompute_logprobs_via_prefill = False
     args.sglang_router_policy = None
+    args.loss_type = "policy_loss"
     args.use_session_server = False
 
     validate_sglang_args(args)

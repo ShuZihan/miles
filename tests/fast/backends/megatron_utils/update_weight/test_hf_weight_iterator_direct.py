@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from types import SimpleNamespace
 
 import pytest
@@ -5,6 +6,7 @@ import torch
 from tests.fast.fixtures.args_fixtures import replace_config_values
 from tests.fast.fixtures.inkling_provider_fixtures import inkling_adapter_model, inkling_provider_env
 
+from miles.backends.megatron_utils.update_weight.hf_weight_iterator_direct import HfWeightIteratorDirect
 from miles.utils.args.custom_function import CustomFunctionConfig
 
 _ = inkling_adapter_model, inkling_provider_env
@@ -43,3 +45,19 @@ class TestNativeInklingExport:
 
         with pytest.raises(NotImplementedError, match="Raw LoRA export is not implemented"):
             iterator._export_pp_local_lora(adapter=None)
+
+
+class TestExpertOwnerPartition:
+    @pytest.mark.parametrize("edp_rank,expert_ids", [(0, [0, 1]), (1, [2])])
+    def test_typed_backend_expert_count_assigns_each_expert_to_one_replica(
+        self,
+        expert_owner_iterator: Callable[[int], HfWeightIteratorDirect],
+        edp_rank: int,
+        expert_ids: list[int],
+    ) -> None:
+        """An uneven expert count partitions converted expert work without duplication or omission."""
+        iterator = expert_owner_iterator(edp_rank)
+
+        names = [info.name for batch in iterator._expert_batches for info in batch.param_infos]
+
+        assert names == [f"decoder.layers.0.mlp.experts.linear_fc1.weight{i}" for i in expert_ids]

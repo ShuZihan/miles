@@ -93,7 +93,6 @@ class DeltaCodec:
         assert_snapshot_equal(expected=actual, actual=DeltaCodec.decode(base=base, overrides=result))
         return result
 
-
     @staticmethod
     def decode(*, base: JsonValue, overrides: ConfigSnapshotDelta) -> JsonValue:
         result = deepcopy(base)
@@ -126,7 +125,8 @@ def _share_overrides(
             for path, value in first.set.items()
             if all(
                 path in processes[name].overrides.set
-                and json.dumps(value, sort_keys=True) == json.dumps(processes[name].overrides.set[path], sort_keys=True)
+                and json.dumps(value, sort_keys=True)
+                == json.dumps(processes[name].overrides.set[path], sort_keys=True)
                 for name in names[1:]
             )
         }

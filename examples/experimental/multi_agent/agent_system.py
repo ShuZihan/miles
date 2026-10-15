@@ -6,13 +6,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from transformers import PreTrainedTokenizerBase
-
 from examples.experimental.multi_agent.prompts import (
     SOLVER_PROMPT_TEMPLATE,
     generate_rewriter_template,
     generate_select_template,
 )
+from transformers import PreTrainedTokenizerBase
+
 from miles.rollout.rm_hub import batched_async_rm
 from miles.utils.args.custom_view import ImmutableNamespace
 from miles.utils.http_utils import post
@@ -24,9 +24,7 @@ class AgentState:
     sample: Sample
     tokenizer: PreTrainedTokenizerBase
     sampling_params: dict[str, Any]
-    results: dict[str, list[Sample]] = field(
-        default_factory=lambda: {"solver": [], "rewriter": [], "selector": []}
-    )
+    results: dict[str, list[Sample]] = field(default_factory=lambda: {"solver": [], "rewriter": [], "selector": []})
 
 
 async def generate_response(args: ImmutableNamespace, prompt: str, key: str, *, state: AgentState) -> str | None:
@@ -189,7 +187,12 @@ class SelectorAgent(Agent):
 
 
 async def rewrite_worker(
-    args: ImmutableNamespace, previous_solutions: list[str], problem_statement: str, worker_id: int, *, state: AgentState
+    args: ImmutableNamespace,
+    previous_solutions: list[str],
+    problem_statement: str,
+    worker_id: int,
+    *,
+    state: AgentState,
 ) -> str | None:
     rewriter = RewriterAgent()
     new_solution = await rewriter.rewrite(args, problem_statement, previous_solutions, state=state)

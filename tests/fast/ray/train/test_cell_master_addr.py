@@ -81,7 +81,9 @@ class TestMasterAddrConfigurationFailure:
 
         with pytest.raises(WorkerUnreachableError):
             await cell.init(
-                ckpt_load_config=None, indep_dp_info=make_indep_dp_info(quorum_id=0), indep_dp_store_addr=None,
+                ckpt_load_config=None,
+                indep_dp_info=make_indep_dp_info(quorum_id=0),
+                indep_dp_store_addr=None,
             )
 
         assert [handle.calls for handle in handles] == [["configure_master_addr_and_port"]] * 2

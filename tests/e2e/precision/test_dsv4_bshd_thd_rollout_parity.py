@@ -6,10 +6,6 @@ from argparse import Namespace
 from pathlib import Path
 
 import torch
-
-from miles.utils.audit_utils.config_snapshot.generated_value_registry import generated_value_registry
-from miles.utils.test_utils.comparisons.metrics import compare_metrics
-from miles.utils.types import Sample
 from scripts.run_deepseek_v4 import (
     _DSV4_TE_PRECISION_CONFIG,
     ScriptArgs,
@@ -19,6 +15,10 @@ from scripts.run_deepseek_v4 import (
     _train,
 )
 from tests.ci.ci_register import register_cuda_ci
+
+from miles.utils.audit_utils.config_snapshot.generated_value_registry import generated_value_registry
+from miles.utils.test_utils.comparisons.metrics import compare_metrics
+from miles.utils.types import Sample
 
 register_cuda_ci(
     est_time=1100, suite="stage-c-4-gpu-h200", labels=["precision", "long"], hardware=["hopper"], num_gpus=4

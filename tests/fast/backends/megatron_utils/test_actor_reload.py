@@ -68,9 +68,13 @@ def _reload(actor: Any) -> int:
     if resume:
         values["load"] = actor.args.backend.requested_load
     request = MegatronCkptLoadConfig(resume_from_ckpt=resume, **values)
-    with actor.args.backend.mutable():
-        for name in (*CHECKPOINT_LOAD_FIELDS, "requested_load"):
-            delattr(actor.args.backend, name)
+    actor.args.backend = type(actor.args.backend)(
+        **{
+            name: value
+            for name, value in vars(actor.args.backend).items()
+            if name not in (*CHECKPOINT_LOAD_FIELDS, "requested_load")
+        }
+    )
     return actor.load_state(request)
 
 

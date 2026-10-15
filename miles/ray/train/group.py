@@ -423,7 +423,9 @@ class TrainerController:
         not_alive = [cell.cell_id for cell in self._cells if not cell.is_alive]
         assert not not_alive, f"a reload does not support cells that are not alive: {not_alive}"
 
-        cell_results = await gather_and_raise_first([cell.load_state(request.ckpt_load_config) for cell in self._cells])
+        cell_results = await gather_and_raise_first(
+            [cell.load_state(request.ckpt_load_config) for cell in self._cells]
+        )
         self._debug_trainer_load_state_timestamp = time.time()
         return [item for sublist in cell_results for item in sublist]
 

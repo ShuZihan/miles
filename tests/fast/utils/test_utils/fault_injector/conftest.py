@@ -103,7 +103,7 @@ def hook_records(tmp_path: Path) -> Iterator[Callable[[], list[FaultHookRecord]]
 
 
 @pytest.fixture
-def runtime_hooks(operations: _CellOperations) -> _FaultHookController:
+async def runtime_hooks(operations: _CellOperations) -> _FaultHookController:
     hooks = _FaultHookController()
     hooks.configure(resources=FaultHookResources(cell_operations=operations))
     return hooks

@@ -14,14 +14,14 @@ class FakeReleaseCluster:
         self._manifests = manifests
         self._pods = pods
 
-    def uninstall_if_present(self, *, release: str, namespace: str) -> None:
+    def uninstall_if_present(self, *, release: str, namespace: str, timeout: float) -> None:
         self.events.append(f"uninstall:{namespace}/{release}")
 
-    def get_manifest(self, release: str, namespace: str) -> object | None:
+    def get_manifest(self, release: str, namespace: str, *, timeout: float) -> object | None:
         self.events.append(f"manifest:{namespace}/{release}")
         return self._manifests.pop(0) if len(self._manifests) > 1 else self._manifests[0]
 
-    def selected_pods(self, namespace: str, selector: str) -> list[Pod]:
+    def selected_pods(self, namespace: str, selector: str, *, timeout: float) -> list[Pod]:
         self.events.append(f"pods:{namespace}/{selector}")
         return self._pods.pop(0) if len(self._pods) > 1 else self._pods[0]
 

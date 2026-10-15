@@ -7,12 +7,9 @@ from tests.fast.fixtures.args_fixtures import parse_megatron_test_config
 from tests.fast.fixtures.megatron_config_fixtures import encode_megatron_config
 
 from miles.backends.megatron_utils import checkpoint, model
-from miles.backends.megatron_utils.megatron_config import MegatronTrainerConfig
 from miles.ray.specs.train import TrainerControllerSpec
 from miles.ray.train.init_request import TrainerControllerInitRequest
 from miles.utils.args.runtime import OrchestratorConfig, TrainerConfig
-from miles.utils.multi_policy import utils as multi_policy_utils
-from miles.utils.workers.backend_capability.base import BackendCapability
 
 
 @dataclass
@@ -79,15 +76,6 @@ def fresh_policy_startup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Fr
     )
     handles = {args.trainer_id: _LoadingTrainer(args=args) for args in TrainerControllerSpec.slice_configs(all_args)}
 
-    def create_handles(
-        args: OrchestratorConfig,
-        *,
-        trainer_configs: list[MegatronTrainerConfig],
-        capability: BackendCapability,
-    ) -> dict[str, _LoadingTrainer]:
-        return {config.trainer_id: handles[config.trainer_id] for config in trainer_configs}
-
-    monkeypatch.setattr(multi_policy_utils, "create_trainer_handles", create_handles)
     monkeypatch.setattr(checkpoint, "_load_checkpoint_hf", lambda **kwargs: (0, 0))
     monkeypatch.setattr(model, "clear_memory", lambda: None)
     monkeypatch.setattr(model, "check_peak_gpu_memory_after_load", lambda args: None)

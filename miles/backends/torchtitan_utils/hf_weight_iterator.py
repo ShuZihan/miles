@@ -25,7 +25,8 @@ class TitanHfWeightIterator(HfWeightIteratorBase):
         super().__init__(*args, **kwargs)
         self._engine_dtypes = _checkpoint_dtypes(self.args.hf_checkpoint)
         self._q_lora_rank = (
-            getattr(load_hf_config(self.args.hf_checkpoint), "q_lora_rank", None) or None  # config-access-exempt: HF models without query LoRA omit q_lora_rank
+            getattr(load_hf_config(self.args.hf_checkpoint), "q_lora_rank", None)
+            or None  # config-access-exempt: HF models without query LoRA omit q_lora_rank
         )
 
     def _iter_hf_param_units(self, weights, *, materialize):
@@ -70,7 +71,9 @@ _GROUPED_EXPERTS = "moe.routed_experts.inner_experts"
 
 
 def _hf_weights_on_device(trainer, *, complete_across_pp: bool) -> Iterator[tuple[str, torch.Tensor]]:
-    sd_adapter = getattr(trainer.checkpointer, "sd_adapter", None)  # config-access-exempt: TorchTitan checkpointer versions may omit the state-dict adapter
+    sd_adapter = getattr(
+        trainer.checkpointer, "sd_adapter", None
+    )  # config-access-exempt: TorchTitan checkpointer versions may omit the state-dict adapter
     if sd_adapter is None:
         sd_adapter = trainer.config.model_spec.state_dict_adapter(trainer.model_config, trainer.config.hf_assets_path)
     state = {k: v for part in trainer.model_parts for k, v in part.state_dict().items()}
@@ -145,7 +148,9 @@ class _StageLayout:
                 tensor = gather_full_param(local[name]).contiguous()
             else:
                 tensor = torch.empty(
-                    shape, dtype=getattr(torch, dtype.split(".")[-1]), device=self.device  # config-access-exempt: torch dtype name comes from the broadcast tensor metadata
+                    shape,
+                    dtype=getattr(torch, dtype.split(".")[-1]),
+                    device=self.device,  # config-access-exempt: torch dtype name comes from the broadcast tensor metadata
                 )
             dist.broadcast(tensor, src=holders[0], group=self.broadcast_group)
             yield name, tensor

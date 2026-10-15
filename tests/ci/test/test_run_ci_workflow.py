@@ -40,8 +40,9 @@ class TestTheDumpsRootOfTheCiWorkflow:
 
 def _jobs() -> dict[str, dict]:
     jobs = yaml.safe_load(WORKFLOW_PATH.read_text())["jobs"]
-    assert jobs
-    return jobs
+    execution_jobs = {name: job for name, job in jobs.items() if name == "run"}
+    assert execution_jobs, "CI workflow has no run job"
+    return execution_jobs
 
 
 def _identity_mounts(options: str) -> list[Path]:

@@ -20,7 +20,9 @@ def test_the_export_passes_the_replicated_gdn_weights_through(name, monkeypatch)
 
     monkeypatch.setattr(qwen3_5_export, "qkv_group_major_to_flat", _fail)
     param = torch.zeros(4, 2)
-    converted = convert_qwen3_8_next_to_hf(None, f"module.module.decoder.layers.3.{name}", param)
+    converted = convert_qwen3_8_next_to_hf(
+        None, f"module.module.decoder.layers.3.{name}", param, hf_checkpoint="unused"
+    )
 
     hf_rest = name[len("self_attention.") :]
     assert converted == [(f"model.language_model.layers.3.{hf_rest}", param)]

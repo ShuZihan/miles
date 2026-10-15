@@ -28,6 +28,8 @@ def test_post_layernorm_flags_propagate_to_megatron(monkeypatch):
         "1",
         "--post-self-attn-layernorm",
         "--post-mlp-layernorm",
+        "--cp-comm-type",
+        "p2p",
     ]
     monkeypatch.setattr(sys, "argv", argv)
 
@@ -72,7 +74,16 @@ def test_kimi_yarn_flags_propagate_to_megatron(monkeypatch, model_type, beta_fas
     monkeypatch.setattr(
         sys,
         "argv",
-        ["pytest", "--train-backend", "megatron", "--rollout-batch-size", "1", *expand_model_args(model_type)],
+        [
+            "pytest",
+            "--train-backend",
+            "megatron",
+            "--rollout-batch-size",
+            "1",
+            "--cp-comm-type",
+            "p2p",
+            *expand_model_args(model_type),
+        ],
     )
 
     args = megatron_parse_args(extra_args_provider=get_miles_extra_args_provider())

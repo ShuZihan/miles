@@ -90,6 +90,7 @@ def _make_mock_args(
         ci_disable_config_snapshot=False,
         save_debug_event_data=None,
         enable_event_analyzer=False,
+        enable_sample_ownership_checker=False,
         object_store_backend="ray",
         worker_comm_backend="ray",
         trainer_model_id=None,
@@ -1302,18 +1303,18 @@ class TestUpdateWeightsReturnsTheVersion:
         """The driver can only publish the version to the executor if the controller hands it back."""
         group = self._make_group(per_worker_outputs=[_output(1), _output(1)])
 
-        assert _outcome_of(await group.update_weights(info=MagicMock())) == _outcome_of(_output(1))
+        assert _outcome_of(await group.update_weights(info=_make_engines(1))) == _outcome_of(_output(1))
 
     async def test_a_trainer_that_skipped_the_broadcast_answers_nothing(self):
         """--debug-skip-weight-update returns None from every worker, which must reach the driver as None."""
         group = self._make_group(per_worker_outputs=[_output(None)])
 
-        assert (await group.update_weights(info=MagicMock())).weight_version is None
+        assert (await group.update_weights(info=_make_engines(1))).weight_version is None
 
     async def test_it_broadcasts_the_window_the_orchestration_script_opened(self):
         """The engines it writes into are the ones the script snapshotted, not a set it fetched for itself."""
         group = self._make_group(per_worker_outputs=[_output(1)])
-        info = MagicMock()
+        info = _make_engines(1)
 
         await group.update_weights(info=info)
 
@@ -1337,7 +1338,7 @@ class TestModelOwnedWeightVersions:
         controller._execute_first_alive = AsyncMock(
             side_effect=[[_output(version), _output(version)] for version in versions]
         )
-        info = MagicMock()
+        info = _make_engines(1)
 
         outputs = [await controller.update_weights(info=info) for _ in versions]
 
@@ -1354,7 +1355,7 @@ class TestModelOwnedWeightVersions:
             side_effect=[RuntimeError("cell died"), [_output(12), _output(12)]]
         )
 
-        assert (await controller.update_weights(info=MagicMock())).weight_version == 12
+        assert (await controller.update_weights(info=_make_engines(1))).weight_version == 12
 
 
 class TestInitForwardsModelFlags:

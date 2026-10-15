@@ -2,8 +2,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-
-from miles.utils.test_utils.snapshot import SNAPSHOT_DIRECTORY, assert_matches_snapshot
 from tests.fast.launch_scripts.py_harness import (
     format_recording,
     freeze_environment,
@@ -12,6 +10,8 @@ from tests.fast.launch_scripts.py_harness import (
     iter_self_executing_launchers,
 )
 from tests.fast.launch_scripts.sh_harness import REPO_ROOT
+
+from miles.utils.test_utils.snapshot import SNAPSHOT_DIRECTORY, assert_matches_snapshot
 
 _SNAPSHOT_DIR = REPO_ROOT / SNAPSHOT_DIRECTORY / "launch_scripts" / "self_executing"
 

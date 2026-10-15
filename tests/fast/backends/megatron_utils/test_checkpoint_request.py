@@ -46,9 +46,14 @@ class TestCheckpointLoadInputs:
     def test_reference_fallback_does_not_mutate_the_orchestrator_inputs(self, tmp_path: Path) -> None:
         """Deriving a fresh load preserves the requested destination and explicit options."""
         args = parse_megatron_test_config(
-            "--load", str(tmp_path / "missing"), "--ref-load", "reference", "--hf-checkpoint", "hf",
-            "--ref-ckpt-step", "7",
+            "--load",
+            str(tmp_path / "missing"),
+            "--ref-load",
+            "reference",
+            "--ref-ckpt-step",
+            "7",
         )
+        args = args.model_copy(update={"hf_checkpoint": "hf"})
         original = args.model_dump()
         [trainer] = args.raw_megatron.trainers
         request = compute_trainer_ckpt_load_config(args, trainer)
