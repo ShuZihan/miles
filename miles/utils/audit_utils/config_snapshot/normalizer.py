@@ -78,7 +78,7 @@ def _normalize_generated_values(config: JsonValue, *, values: list[ConfigSnapsho
             {
                 key: _normalize_field(value, key=key, values=values, config=fields)
                 for key, value in fields.items()
-                if isinstance(value, str) and (key in _PATH_FIELDS or key == "wandb_group")
+                if isinstance(value, str) and (key in _PATH_FIELDS or key in {"wandb_group", "wandb_key"})
             }
         )
     return result
@@ -135,7 +135,10 @@ def _normalize_field(
 ) -> str:
     for entry in values:
         token = f"${entry.kind.upper()}_{entry.name}"
-        if key == "wandb_group":
+        if key == "wandb_key":
+            if entry.kind == "wandb_key" and value == entry.value:
+                return token
+        elif key == "wandb_group":
             if entry.kind == "ci_commit_name" and value.endswith(f"_{entry.value}"):
                 value = value[: -len(entry.value)] + token
             elif entry.kind == "run_id":
