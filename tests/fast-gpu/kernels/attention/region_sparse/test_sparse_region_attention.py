@@ -3,7 +3,7 @@
 from tests.ci.ci_register import register_cuda_ci
 
 # tuned for, and only run on, Blackwell: the chunk sizes are what its tensor memory leaves room for
-register_cuda_ci(est_time=120, suite="stage-c-8-gpu-b200", labels=["miles-plugin"], hardware=["blackwell"])
+register_cuda_ci(est_time=60, suite="stage-c-4-gpu-b200", labels=["precision"], hardware=["blackwell"], num_gpus=1)
 
 from dataclasses import dataclass
 

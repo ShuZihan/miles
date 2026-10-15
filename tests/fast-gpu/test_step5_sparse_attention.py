@@ -3,7 +3,8 @@
 from tests.ci.ci_register import register_cuda_ci
 
 # the kernel is tuned for, and only run on, Blackwell
-register_cuda_ci(est_time=300, suite="stage-c-8-gpu-b200", labels=["miles-plugin"], hardware=["blackwell"])
+# the largest layout is TP4
+register_cuda_ci(est_time=300, suite="stage-c-4-gpu-b200", labels=["miles-plugin"], hardware=["blackwell"], num_gpus=4)
 
 import os
 import subprocess

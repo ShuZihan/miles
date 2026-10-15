@@ -1,12 +1,18 @@
 """tools/fp8_cast_bf16.py: block-scaled FP8 dequantization (2-D weights and packed expert tensors) and the
 BF16 config it writes."""
 
-import importlib
-import sys
-from pathlib import Path
+from tests.ci.ci_register import register_cuda_ci
 
-import pytest
-import torch
+register_cuda_ci(
+    est_time=30, suite="stage-b-2-gpu-h200", labels=["precision"], hardware=["hopper", "blackwell"], num_gpus=1
+)
+
+import importlib  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+import torch  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA for the Triton kernel")
 
