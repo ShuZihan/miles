@@ -34,6 +34,7 @@ class FTTestMode:
     rollout_gpus_per_engine: int = 0
     ft_components: tuple[str, ...] = ("train",)
     num_steps: int = 10
+    max_tokens_per_gpu: int = 32768
 
     def __post_init__(self) -> None:
         assert "rollout" not in self.ft_components or self.has_real_rollout, (
@@ -175,6 +176,7 @@ MODES: dict[str, FTTestMode] = {
         rollout_num_engines=4,
         rollout_gpus_per_engine=1,
         parallel_args="--context-parallel-size 2",
+        max_tokens_per_gpu=8192,
     ),
     # Same topology as kill_train__dp2_cp2__moe_5layer but a small real dense model (see README).
     "kill_train__dp2_cp2": FTTestMode(

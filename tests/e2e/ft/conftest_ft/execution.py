@@ -134,7 +134,7 @@ def get_common_train_args(
         f"--global-batch-size 256 "
         "--delay-split-train-data-by-dp "
         "--use-dynamic-batch-size "
-        "--max-tokens-per-gpu 32768 "
+        f"--max-tokens-per-gpu {mode.max_tokens_per_gpu} "
         "--moe-token-dispatcher-type alltoall "
         "--advantage-estimator grpo "
         "--eps-clip 0.2 "
