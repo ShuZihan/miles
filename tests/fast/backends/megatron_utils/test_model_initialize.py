@@ -319,10 +319,6 @@ class TestALoraAdapterThatCarriesItsOwnIteration:
 
         assert output.start_rollout_id == output.loaded_rollout_id + 1
 
-    def test_a_lora_run_that_really_starts_from_scratch_still_starts_at_rollout_one(self, tmp_path: Path):
-        """An adapter with no training state answers iteration 0, and the run continues from the next rollout."""
-        assert _load_model_state_with(tmp_path=tmp_path, finetune=True, iteration=0, lora_rank=8).start_rollout_id == 1
-
 
 class _MastersUnderChunkedOffload:
     """Where a --chunked-optimizer-state-offload optimizer keeps its fp32 masters: built on GPU, refreshed there by

@@ -61,6 +61,9 @@ class FakeFiniteOptimizer(FakeNonfiniteOptimizer):
         self.step_count += 1
         return True, 1.0, 0
 
+    def offload_optimizer_state_for_forward(self) -> None:
+        pass
+
 
 class FakeScheduler:
     def step(self, *, increment: int) -> None:
