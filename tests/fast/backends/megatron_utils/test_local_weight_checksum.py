@@ -130,6 +130,22 @@ class TestComputeWeightChecksums:
         assert isinstance(info.state_dict["state"][0]["exp_avg"], str)
         assert len(info.state_dict["state"][0]["exp_avg"]) == 64
 
+    def test_frozen_param_without_main_param_is_hashed_but_not_mapped(self) -> None:
+        # Megatron keeps requires_grad=False params (e.g. the model companion) out of the optimizer,
+        # so they never get main_param.
+        trainable = torch.nn.Parameter(torch.randn(2, 2))
+        trainable.main_param = trainable.detach().clone()
+        frozen = torch.nn.Parameter(torch.zeros(3, dtype=torch.int64), requires_grad=False)
+        chunk = MagicMock()
+        chunk.named_parameters.return_value = [("frozen", frozen), ("trainable", trainable)]
+        chunk.named_buffers.return_value = []
+        optimizer = _make_mock_optimizer_with_state_dict(params=[trainable.main_param])
+
+        entry = _compute_weight_checksum_state(model=[chunk], optimizer=optimizer)
+
+        assert set(entry.param_hashes.keys()) == {"pp0.frozen", "pp0.trainable"}
+        assert entry.optimizer_hashes[0].param_names == {0: "pp0.trainable"}
+
 
 class TestTransformTensorToHash:
     def test_replaces_tensor_with_hash(self) -> None:
@@ -206,11 +222,11 @@ class TestFailFastAssertions:
         with pytest.raises(AssertionError, match="No sub-optimizers found"):
             _compute_weight_checksum_state(model=model, optimizer=optimizer)
 
-    def test_assert_param_without_main_param_fails(self) -> None:
+    def test_assert_trainable_param_without_main_param_fails(self) -> None:
         from miles.backends.megatron_utils.local_weight_checksum import _build_name_by_tensor_id
 
         chunk = MagicMock()
-        param = torch.randn(2, 2)
+        param = torch.nn.Parameter(torch.randn(2, 2))
         chunk.named_parameters.return_value = [("weight", param)]
 
         with pytest.raises(AssertionError, match="main_param is None"):

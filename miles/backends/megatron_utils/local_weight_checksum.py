@@ -131,9 +131,10 @@ def _build_name_by_tensor_id(model: Sequence[DDP]) -> dict[_MainParamId, str]:
             assert param is not None, f"pp{pp_idx}.{name}: param is None"
             main_param = getattr(param, "main_param", None)
             if main_param is None:
-                assert getattr(param, "main_param_sharded", False), (
+                # Megatron keeps requires_grad=False params out of the optimizer, so they have no main_param.
+                assert not param.requires_grad or getattr(param, "main_param_sharded", False), (
                     f"pp{pp_idx}.{name}: main_param is None but main_param_sharded is not set. "
-                    "Expected only for distributed optimizer params not owned by this DP rank."
+                    "Expected only for frozen params or distributed optimizer params not owned by this DP rank."
                 )
                 continue
             name_map[_MainParamId.from_tensor(main_param)] = f"pp{pp_idx}.{name}"
