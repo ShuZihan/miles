@@ -15,7 +15,7 @@ register_cuda_ci(
         "FT soak tests pending CI infra support: every ft-long entry is disabled for the same reason, and the "
         "specific infra gap is not recorded anywhere in the repo. Unblock condition: an ft-long capable "
         "stage-c-8-gpu-h200 lane, then drop this argument. Two of this entry's constants are also uncalibrated "
-        "until it has run once: MIN_TRAINED_ROLLOUTS and est_time. See tests/e2e/ft/README.md."
+        "until it has run once: MIN_TRAINED_ROLLOUTS and est_time. See tests/e2e/ft/README.md. (#3739)"
     ),
     num_gpus=8,
 )

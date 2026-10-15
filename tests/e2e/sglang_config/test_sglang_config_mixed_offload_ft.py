@@ -26,7 +26,7 @@ register_cuda_ci(
     disabled=(
         "Colocated fault tolerance is unsupported: miles_validate_args rejects rollout fault tolerance without a "
         "partial-target P2P weight update, which --colocate cannot provide. Unblock condition: a decision to port "
-        "this recovery scenario to a disaggregated P2P layout or to delete it."
+        "this recovery scenario to a disaggregated P2P layout or to delete it. (#3739)"
     ),
 )
 register_rocm_ci(
@@ -36,7 +36,7 @@ register_rocm_ci(
     disabled=(
         "Colocated fault tolerance is unsupported: miles_validate_args rejects rollout fault tolerance without a "
         "partial-target P2P weight update, which --colocate cannot provide. Unblock condition: a decision to port "
-        "this recovery scenario to a disaggregated P2P layout or to delete it."
+        "this recovery scenario to a disaggregated P2P layout or to delete it. (#3739)"
     ),
 )
 

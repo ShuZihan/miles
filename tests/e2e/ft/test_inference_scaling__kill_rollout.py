@@ -11,7 +11,7 @@ register_cuda_ci(
     suite="stage-c-8-gpu-h200",
     labels=["ft-long"],
     hardware=["hopper", "blackwell"],
-    disabled="needs a Kubernetes cluster backend: the engine pool is resized as a LeaderWorkerSet",
+    disabled="needs a Kubernetes cluster backend: the engine pool is resized as a LeaderWorkerSet (#3739)",
 )
 
 if __name__ == "__main__":
