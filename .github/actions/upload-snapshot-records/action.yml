@@ -3,7 +3,7 @@ description: Upload all raw runtime dumps and attempt metadata, including record
 
 inputs:
   execute_command:
-    description: The command the job ran; its --suite and --auto-partition-id name the artifact
+    description: The command the job ran; its suite, partition and digest name the artifact
     required: true
   path:
     description: The complete record directory containing raw dumps and attempt.json files
@@ -21,7 +21,7 @@ runs:
         suite=$(echo "$EXECUTE_COMMAND" | grep -oP -- '--suite\s+\K\S+' || true)
         partition=$(echo "$EXECUTE_COMMAND" | grep -oP -- '--auto-partition-id\s+\K\S+' || true)
         digest=$(echo -n "$EXECUTE_COMMAND" | sha1sum | cut -c1-8)
-        echo "name=snapshot-records-${suite:-command-$digest}${partition:+-p$partition}" >> "$GITHUB_OUTPUT"
+        echo "name=snapshot-records-${suite:-command}${partition:+-p$partition}-$digest" >> "$GITHUB_OUTPUT"
 
     - name: Upload snapshot records
       uses: actions/upload-artifact@v4
