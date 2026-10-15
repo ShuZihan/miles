@@ -53,7 +53,7 @@ class HfWeightIteratorDirect(MegatronHfWeightIteratorBase):
             edp = parallel.edp
             assert edp is not None, "Expert data parallel state is required for MoE weight updates"
             owner_infos = _partition_expert_infos(
-                expert_infos, num_local_experts=self.args.num_experts // ep_size, edp_size=edp.size
+                expert_infos, num_local_experts=self.args.backend.num_experts // ep_size, edp_size=edp.size
             )
             # At ETP1, TP x DP x CP is exactly EP x EDP. Borrow Megatron's
             # combined group to avoid repacking between EP and EDP gathers.
