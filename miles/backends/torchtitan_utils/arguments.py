@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import torch
 
 from miles.backends.fsdp_utils.arguments import FSDPArgs, build_dataclass_parser, load_args_from_parser
+from miles.utils.lora.utils import is_lora_enabled, lora_rollout_enabled
 
 
 @dataclass
@@ -62,3 +63,22 @@ def validate_torchtitan_args(args) -> None:
         )
     if args.save_debug_train_data is not None:
         raise ValueError("--save-debug-train-data is not wired up for the torchtitan backend")
+    if is_lora_enabled(args):
+        _validate_lora_args(args)
+
+
+def _validate_lora_args(args) -> None:
+    if args.lora_type != "canonical_lora":
+        raise ValueError(
+            "torchtitan gives q/k/v and gate/up their own lora_A, which is --lora-type canonical_lora; "
+            f"--lora-type {args.lora_type} shares one lora_A across each fused projection on megatron"
+        )
+    if args.lora_dropout != 0:
+        raise ValueError(f"torchtitan's LoRA has no dropout; got --lora-dropout {args.lora_dropout}")
+    if args.lora_adapter_path is not None:
+        raise ValueError("--lora-adapter-path is not wired up for the torchtitan backend; resume with --load")
+    if lora_rollout_enabled(args) and args.colocate_memory_peak_device == "gpu":
+        raise ValueError(
+            "--colocate-memory-peak-device gpu pauses the LoRA grad buffers of the megatron backend, "
+            "which the torchtitan backend does not have; use the default cpu"
+        )

@@ -137,7 +137,10 @@ def validate_lora_args(args):
     validate_multi_lora_args(args)
     if not is_lora_enabled(args):
         return
-    assert args.train_backend == "megatron", "LoRA injection is not implemented for FSDP; use --train-backend megatron"
+    assert args.train_backend in (
+        "megatron",
+        "torchtitan",
+    ), f"LoRA injection is not implemented for --train-backend {args.train_backend}; use megatron or torchtitan"
     assert args.lora_rank > 0, "LoRA requires a positive --lora-rank, including when loading an adapter"
     hf_config = load_hf_config(args.hf_checkpoint)
     args.hf_lora_targets, args.lora_adapter_targets = _resolve_lora_targets(args, hf_config)

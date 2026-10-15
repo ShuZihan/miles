@@ -29,6 +29,12 @@ def _args(**overrides) -> Namespace:
         lr_warmup_fraction=None,
         lr_wsd_decay_iters=None,
         lr_decay_iters=None,
+        lora_rank=0,
+        lora_type="canonical_lora",
+        lora_dropout=0.0,
+        lora_adapter_path=None,
+        lora_train_only=False,
+        colocate_memory_peak_device="cpu",
     )
     return Namespace(**{**base, **overrides})
 
@@ -62,6 +68,20 @@ def test_unsupported_flags_are_rejected_rather_than_ignored(monkeypatch):
         validate_torchtitan_args(_args(ref_update_interval=4))
     with pytest.raises(ValueError, match="save-debug-train-data"):
         validate_torchtitan_args(_args(save_debug_train_data="/tmp/dump"))
+
+
+def test_lora_flags_torchtitan_cannot_honor_are_rejected(monkeypatch):
+    monkeypatch.setattr(torch, "__version__", "2.13.0")
+    validate_torchtitan_args(_args(lora_rank=8))
+    with pytest.raises(ValueError, match="canonical_lora"):
+        validate_torchtitan_args(_args(lora_rank=8, lora_type="lora"))
+    with pytest.raises(ValueError, match="no dropout"):
+        validate_torchtitan_args(_args(lora_rank=8, lora_dropout=0.05))
+    with pytest.raises(ValueError, match="--lora-adapter-path"):
+        validate_torchtitan_args(_args(lora_rank=8, lora_adapter_path="/adapter"))
+    with pytest.raises(ValueError, match="grad buffers"):
+        validate_torchtitan_args(_args(lora_rank=8, colocate_memory_peak_device="gpu"))
+    validate_torchtitan_args(_args(lora_rank=8, colocate_memory_peak_device="gpu", lora_train_only=True))
 
 
 def _config_args(**overrides) -> Namespace:
