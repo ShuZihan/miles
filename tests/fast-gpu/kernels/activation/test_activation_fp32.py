@@ -114,6 +114,27 @@ def _sconv_reference(x: torch.Tensor, weight: torch.Tensor, seqlens: list[int]) 
     return torch.cat(segments)
 
 
+def test_swiglu_addresses_rows_past_int32_offsets():
+    """Rows whose element offset ``row * 2N`` passes 2**31 are read and written where they belong, not wrapped."""
+    width = 8192
+    tokens = 2**31 // (2 * width) + 2
+    fc1_out = torch.zeros(tokens, 2 * width, device="cuda", dtype=torch.bfloat16)
+    rows = torch.tensor([0, tokens - 2, tokens - 1], device="cuda")
+    fc1_out[rows] = torch.randn(3, 2 * width, device="cuda", dtype=torch.bfloat16)
+    fc1_out.requires_grad_()
+
+    out = swiglu_fp32(fc1_out)
+    grad = torch.zeros_like(out)
+    grad[rows] = torch.randn(3, width, device="cuda", dtype=torch.bfloat16)
+    out.backward(grad)
+
+    tail = fc1_out.detach()[rows].double().requires_grad_()
+    expected = _swiglu_reference(tail, None)
+    expected.backward(grad[rows].double())
+    assert _rel_err(out[rows], expected.detach()) < 1e-2
+    assert _rel_err(fc1_out.grad[rows], tail.grad) < 1e-2
+
+
 @pytest.mark.parametrize("seqlens", [[300], [70, 1, 129, 100]], ids=["single", "packed"])
 def test_sconv_matches_float64_reference(seqlens):
     torch.manual_seed(0)

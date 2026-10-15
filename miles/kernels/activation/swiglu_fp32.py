@@ -22,7 +22,8 @@ def _swiglu_fwd_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
 ):
-    pid_m = tl.program_id(0)
+    # int64: row offsets reach M * 2N, past 2**31 for a 13,824-wide MLP above ~77K tokens
+    pid_m = tl.program_id(0).to(tl.int64)
     pid_n = tl.program_id(1)
     offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
@@ -56,7 +57,7 @@ def _swiglu_bwd_kernel(
     NEED_DSCALE: tl.constexpr,
     BLOCK_N: tl.constexpr,
 ):
-    row = tl.program_id(0)
+    row = tl.program_id(0).to(tl.int64)
     if row >= M:
         return
     sc = 1.0
