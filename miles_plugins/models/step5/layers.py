@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 import torch
-import torch.nn.functional as F
 from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
@@ -71,16 +70,6 @@ class Step5FinalRMSNorm(Step5RMSNorm):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return super().forward(hidden_states.to(self.output_dtype))
-
-
-def clamped_swiglu(x: torch.Tensor) -> torch.Tensor:
-    """``min(silu(gate), 7) * clamp(up, -7, 7)`` over the packed ``[gate | up]`` fc1 output.
-
-    Widened to fp32 for the activation and the product; only the result is rounded. Used by
-    the dense MLPs, the routed experts and the shared expert alike.
-    """
-    gate, up = torch.chunk(x.float(), 2, dim=-1)
-    return (F.silu(gate).clamp(max=SWIGLU_LIMIT) * up.clamp(-SWIGLU_LIMIT, SWIGLU_LIMIT)).to(x.dtype)
 
 
 class Step5Attention(SelfAttention):

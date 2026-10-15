@@ -1,7 +1,7 @@
 # miles.kernels
 
 ```
-activation/        swiglu_fp32 · short_conv_fp32
+activation/        swiglu_fp32 (optional per-token scale and SiLU-output clamp) · short_conv_fp32
 attention/
   dense/           dense_attention_backward
   dsa/             sparse_attention · lightning_indexer · indexer_logits[_sbhd] · indexer_topk_scores · kpool · topk

@@ -27,21 +27,27 @@ from megatron.core.transformer.transformer_layer import (
     get_transformer_layer_offset,
 )
 
+from miles.kernels.activation.swiglu_fp32 import swiglu_fp32
 from miles.utils.hf_utils.config import load_hf_config
 from miles_plugins.models.step5.checkpoint_config import check_matches_checkpoint
 from miles_plugins.models.step5.layers import (
+    SWIGLU_LIMIT,
     Step5Attention,
     Step5FinalRMSNorm,
     Step5RMSNorm,
-    clamped_swiglu,
     is_full_attention_layer,
 )
 from miles_plugins.models.step5.sparse_attention import Step5SparseAttention, Step5SparseCoreAttention
 
 
 def configure_step5(config: TransformerConfig) -> None:
-    """Set what the Megatron CLI cannot: the activation callable and the fusions it rules out."""
-    config.gated_activation_func = clamped_swiglu
+    """Set what the Megatron CLI cannot: the activation callable and the fusions it rules out.
+
+    ``min(silu(gate), 7) * clamp(up, -7, 7)`` in fp32, rounded once, for the dense MLPs, the routed experts and
+    the shared expert alike: the kernel sglang's SiluClampAndMul computes, not Megatron's
+    ``activation_func_clamp_value``, which clamps SiLU's input.
+    """
+    config.gated_activation_func = partial(swiglu_fp32, limit=SWIGLU_LIMIT)
     config.bias_activation_fusion = False
     config.use_te_activation_func = False
 

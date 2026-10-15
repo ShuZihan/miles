@@ -14,11 +14,7 @@ from miles.backends.training_utils.weight_update.hf_weight_iterator.engine_resid
     is_engine_resident,
 )
 from miles_plugins.models.step5.checkpoint_config import check_matches_checkpoint  # noqa: E402
-from miles_plugins.models.step5.layers import (  # noqa: E402
-    clamped_swiglu,
-    is_full_attention_layer,
-    zero_centered_rms_norm,
-)
+from miles_plugins.models.step5.layers import is_full_attention_layer, zero_centered_rms_norm  # noqa: E402
 from miles_plugins.models.step5.qkv_layout import fuse_qkv_and_gate, split_qkv_and_gate  # noqa: E402
 
 _SLICE = (0, 3, 4, 88, 91)
@@ -181,15 +177,6 @@ def test_indexer_rope_scaling_is_checked():
 def test_rope_theta_is_checked_per_layer():
     with pytest.raises(ValueError, match=r"rope_theta\[4\]"):
         check_matches_checkpoint(_megatron_config(), _checkpoint_config(rope_theta=[1e4, 1e7, 1e4, 1e4, 1e4]))
-
-
-def test_clamped_swiglu_bounds_both_halves():
-    gate = torch.tensor([[-3.0, 0.5, 20.0]])
-    up = torch.tensor([[9.0, -0.25, -12.0]])
-    out = clamped_swiglu(torch.cat([gate, up], dim=-1).bfloat16())
-    expected = torch.nn.functional.silu(gate).clamp(max=7.0) * up.clamp(-7.0, 7.0)
-    assert out.dtype == torch.bfloat16
-    torch.testing.assert_close(out, expected.bfloat16(), rtol=0, atol=0)
 
 
 def test_zero_centered_norm_scales_by_one_plus_weight():
