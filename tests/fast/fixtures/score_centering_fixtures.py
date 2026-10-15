@@ -84,23 +84,21 @@ def _meta(output: list[int], probabilities: list[float]) -> dict:
 
 
 def _flat_meta(output: list[int], probabilities: list[float]) -> dict:
-    """``_meta`` with the candidates in SGLang's flat base64 output top-logprob format."""
+    """``_meta`` with the candidates in SGLang's flat base64 format, padded to the 3 columns SGLang returns
+    for ``top_logprobs=3`` with a low-probability filler token."""
     meta = _meta(output, probabilities)
-    return meta | _flat_output_top_logprobs(meta.pop("output_top_logprobs"))
+    rows = [[*row, (-20.0, 7, None)] for row in meta.pop("output_top_logprobs")]
+    return meta | _flat_output_top_logprobs(rows)
 
 
-def _flat_output_top_logprobs(rows: list, *, null_prefix: int = 0, b64: bool = True) -> dict:
+def _flat_output_top_logprobs(rows: list, *, null_prefix: int = 0) -> dict:
     """Encode nested [logprob, token_id, text] rows the way SGLang's return_flat_raw_output_top_logprobs does."""
     shape = [len(rows), len(rows[0]) if rows else 0]
-    val = np.asarray([[entry[0] for entry in row] for row in rows], dtype=np.float32).reshape(shape)
-    idx = np.asarray([[entry[1] for entry in row] for row in rows], dtype=np.int32).reshape(shape)
-    fields = {"output_top_logprobs_shape": shape, "output_top_logprobs_null_prefix": null_prefix}
-    if not b64:
-        return fields | {
-            "output_top_logprobs_val_flat": val.ravel().tolist(),
-            "output_top_logprobs_idx_flat": idx.ravel().tolist(),
-        }
-    return fields | {
+    val = np.asarray([[entry[0] for entry in row] for row in rows], dtype="<f4").reshape(shape)
+    idx = np.asarray([[entry[1] for entry in row] for row in rows], dtype="<i4").reshape(shape)
+    return {
+        "output_top_logprobs_shape": shape,
+        "output_top_logprobs_null_prefix": null_prefix,
         "output_top_logprobs_val_flat_b64": pybase64.b64encode(val.tobytes()).decode("ascii"),
         "output_top_logprobs_idx_flat_b64": pybase64.b64encode(idx.tobytes()).decode("ascii"),
         "output_top_logprobs_val_flat_b64_dtype": "float32",

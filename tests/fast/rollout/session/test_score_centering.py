@@ -44,12 +44,13 @@ def test_score_centering_training_and_evaluation_sessions(registry_type: type, c
             ).body
             assert request["temperature"] == 0 and "top_logprobs" not in request
             assert "return_flat_raw_output_top_logprobs" not in request
+            assert "return_flat_raw_top_logprobs_b64" not in request
         else:
             request = prepare_chat_request(
                 {}, tokenizer, config=config, turn_args=None, evaluation=session.evaluation
             ).body
             assert request["top_logprobs"] == 128 and request["temperature"] == 0.7
-            assert request["return_flat_raw_output_top_logprobs"]
+            assert request["return_flat_raw_output_top_logprobs"] and request["return_flat_raw_top_logprobs_b64"]
             with pytest.raises(MessageValidationError, match="temperature"):
                 prepare_chat_request(
                     {"temperature": 0}, tokenizer, config=config, turn_args=None, evaluation=session.evaluation
