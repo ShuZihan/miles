@@ -19,17 +19,21 @@ processes:
     diffs: &id005 {router_endpoints-0000: {set: {<<: &id002 {/args/sglang_model_routers: {default: {$tuple: [$HOST, $PORT]}},
             /args/sglang_router_ip: $HOST, /args/sglang_router_port: $PORT}}}}
     overrides:
+      remove: &id006 [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/load, /args/requested_load, /args/sglang/base_args/elastic_ep_rejoin,
+        /args/sglang/base_args/keep_mm_feature_on_device]
       set:
         <<:
-        - &id003 {/args/balance_data: true, /args/global_batch_size: 64, /args/init_expected_num_cells/default: 1, /args/num_layers: 4,
+        - &id003 {/args/balance_data: true, /args/global_batch_size: 16, /args/init_expected_num_cells/default: 1, /args/num_layers: 4,
           /args/num_rollout: 2, /args/wandb_project: miles-run_kimi_k3}
         - &id004
           /args/check_lora_weight_equal: true
           /args/check_weight_update_allow_quant_error: true
           /args/check_weight_update_skip_list: [vision_tower., mm_projector.]
           /args/ci_disable_logprobs_checker: true
+          /args/ci_event_root: null
           /args/config_snapshot_name: tests/e2e/megatron/model_scripts/test_kimi_k3_4layer_lora_ci/run-0000
           /args/critic_lr: 1.0e-05
+          /args/dsa_impl: miles
           /args/enable_sample_ownership_checker: false
           /args/experts_shared_outer_loras: true
           /args/hf_checkpoint: /root/models/Kimi-K3-4layer-64experts
@@ -66,21 +70,49 @@ processes:
           /args/lora_rank: 32
           /args/max_tokens_per_gpu: 512
           /args/model_name: kimi_k3
+          /args/n_samples_per_prompt: 4
           /args/prompt_data: /root/datasets/gsm8k/train.parquet
           /args/ref_load: /root/models/Kimi-K3-4layer-64experts-bf16-kda-direct-v1_torch_dist
           /args/rm_type: deterministic_random
+          /args/rollout_batch_size: 4
           /args/rollout_max_response_len: 256
           /args/rollout_num_gpus_per_engine: 8
+          /args/rollout_sampling_logprobs_mode: selected
+          /args/rollout_top_logprobs_num: 0
+          /args/score_centering_is: none
+          /args/score_centering_mis_high: 5.0
+          /args/score_centering_mis_low: 0.5
+          /args/score_centering_tis_clip: 2.0
+          /args/sglang/base_args/boundary_reduction: auto
+          /args/sglang/base_args/constrained_json_max_whitespace_cnt: null
           /args/sglang/base_args/cuda_graph_bs_decode: [1, 2, 4, 8, 16]
+          /args/sglang/base_args/cuda_graph_max_seq_len_prefill: null
+          /args/sglang/base_args/cuda_graph_prefill_max_context: null
+          /args/sglang/base_args/disable_aiter_allreduce_fusion_in_decode: false
+          /args/sglang/base_args/disable_aiter_allreduce_fusion_in_prefill: false
           /args/sglang/base_args/disable_shared_experts_fusion: true
+          /args/sglang/base_args/disaggregation_decode_host_receive_threshold: 0.0
+          /args/sglang/base_args/disaggregation_enable_kv_checksum: false
+          /args/sglang/base_args/enable_decoder_swa_bounded_replay: false
+          /args/sglang/base_args/enable_encoder_swa_bounded_replay: false
+          /args/sglang/base_args/enable_linker_mla_dedup: false
+          /args/sglang/base_args/enable_pd_role_switch: false
           /args/sglang/base_args/experts_shared_outer_loras: true
+          /args/sglang/base_args/grpc_response_timeout_secs: 300
+          /args/sglang/base_args/hicache_host_memory_fraction: 0.8
           /args/sglang/base_args/lora_backend: triton
           /args/sglang/base_args/lora_strict_loading: true
           /args/sglang/base_args/max_lora_rank: 32
           /args/sglang/base_args/max_mamba_cache_size: 16
           /args/sglang/base_args/max_running_requests: 16
           /args/sglang/base_args/moe_runner_backend: marlin
+          /args/sglang/base_args/otlp_service_name: null
+          /args/sglang/base_args/prefill_kv_cache_dequant_dtype: auto
+          /args/sglang/base_args/shared_experts_tp_size: null
+          /args/sglang/base_args/speculative_draft_sink_size: null
+          /args/sglang/base_args/swa_prefix_tails: null
           /args/sglang/base_args/tp_size: 8
+          /args/sglang/base_args/trust_request_chat_template: false
           /args/sglang/models:
           - model_path: null
             name: default
@@ -96,12 +128,14 @@ processes:
           /args/use_dynamic_global_batch_size: true
           /args/use_miles_router: true
           /args/wandb_group: $RUN_ID_0000_$CI_COMMIT_NAME_github
+          /args/wandb_key: $WANDB_KEY_environment
     template: inference_controller-01
   tests/e2e/megatron/model_scripts/test_kimi_k3_4layer_lora_ci/run-0000/all/default/main:
     diffs:
       router_endpoints-0000: {set: {<<: *id002, /args/wandb_run_id: $WANDB_RUN_ID_0000}}
       tracking_config-0000: {set: {/args/wandb_run_id: $WANDB_RUN_ID_0000}}
-    overrides: &id006
+    overrides:
+      remove: &id008 [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/sglang/base_args/elastic_ep_rejoin, /args/sglang/base_args/keep_mm_feature_on_device]
       set:
         <<:
         - *id003
@@ -111,12 +145,19 @@ processes:
           /args/raw_megatron/base_args/attention_backend/name: auto
           /args/raw_megatron/base_args/check_for_nan_in_loss_and_grad: false
           /args/raw_megatron/base_args/disable_bf16_reduced_precision_matmul: true
+          /args/raw_megatron/base_args/dsa_cp_balance_indexer: false
+          /args/raw_megatron/base_args/dsa_indexer_precision: bf16
+          /args/raw_megatron/base_args/dsa_indexer_topk_backend: null
+          /args/raw_megatron/base_args/dsa_indexer_topk_deterministic: false
+          /args/raw_megatron/base_args/dsa_indexer_topk_tie_break: 0
+          /args/raw_megatron/base_args/dsa_indexer_weights_proj_output_dtype: bf16
+          /args/raw_megatron/base_args/dsa_indexer_weights_proj_use_quantization: true
           /args/raw_megatron/base_args/encoder_num_layers: 4
-          /args/raw_megatron/base_args/eval_global_batch_size: 64
+          /args/raw_megatron/base_args/eval_global_batch_size: 16
           /args/raw_megatron/base_args/expert_model_parallel_size: 8
           /args/raw_megatron/base_args/ffn_hidden_size: 33792
           /args/raw_megatron/base_args/finetune: false
-          /args/raw_megatron/base_args/global_batch_size: 64
+          /args/raw_megatron/base_args/global_batch_size: 16
           /args/raw_megatron/base_args/gradient_accumulation_fusion: false
           /args/raw_megatron/base_args/group_query_attention: false
           /args/raw_megatron/base_args/hidden_size: 7168
@@ -154,7 +195,7 @@ processes:
           /args/raw_megatron/base_args/q_lora_rank: 1536
           /args/raw_megatron/base_args/rope_type: yarn
           /args/raw_megatron/base_args/rotary_base: 10000
-          /args/raw_megatron/base_args/spec: &id008 [miles_plugins.models.kimi_k3, get_kimi_k3_spec]
+          /args/raw_megatron/base_args/spec: &id009 [miles_plugins.models.kimi_k3, get_kimi_k3_spec]
           /args/raw_megatron/base_args/tensor_model_parallel_size: 8
           /args/raw_megatron/base_args/tokenizer_model: /root/models/Kimi-K3-4layer-64experts
           /args/raw_megatron/base_args/use_precision_aware_optimizer: true
@@ -162,39 +203,66 @@ processes:
           /args/raw_megatron/base_args/vocab_size: 163840
           /args/raw_megatron/base_args/wandb_project: miles-run_kimi_k3
           /args/raw_megatron/base_args/world_size: 8
+          /args/raw_torchtitan: null
     template: main-01
   tests/e2e/megatron/model_scripts/test_kimi_k3_4layer_lora_ci/run-0000/all/default/rollout_executor:
     diffs: *id005
-    overrides: *id006
+    overrides:
+      remove: *id006
+      set:
+        <<:
+        - *id003
+        - *id004
+        - *id007
+        /args/over_sampling_batch_size: 4
     template: rollout_executor-01
   tests/e2e/megatron/model_scripts/test_kimi_k3_4layer_lora_ci/run-0000/all/default/trainer_controller_actor: {overrides: {
       set: {/args/backend/rank: 0}}, template: trainer-megatron-02}
   tests/e2e/megatron/model_scripts/test_kimi_k3_4layer_lora_ci/run-0000/all/default/worker_manager:
     overrides:
+      remove: *id008
       set:
         <<:
         - *id003
         - *id004
         - *id007
         /args/actor_num_gpus_per_node: 8
+        /args/over_sampling_batch_size: 4
         /args/rollout_num_gpus: 8
         /args/sglang_scaling/groups/default:
         - {engine_offset: 0, gpu_offset: 0, num_gpus: 8}
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
-    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
+    remove:
+    - /args/backend/ckpt_step
+    - /args/backend/finetune
+    - /args/backend/load
+    - /args/backend/no_load_optim
+    - /args/backend/no_load_rng
+    - /args/ci_logprobs_checker_abs_tol
+    - /args/freeze_indexer
+    - /args/requested_load
+    - /args/sglang/base_args/elastic_ep_rejoin
+    - /args/sglang/base_args/keep_mm_feature_on_device
     set:
       <<: *id004
       /args/backend/apply_rope_fusion: false
       /args/backend/attention_backend/name: auto
       /args/backend/check_for_nan_in_loss_and_grad: false
       /args/backend/disable_bf16_reduced_precision_matmul: true
+      /args/backend/dsa_cp_balance_indexer: false
+      /args/backend/dsa_indexer_precision: bf16
+      /args/backend/dsa_indexer_topk_backend: null
+      /args/backend/dsa_indexer_topk_deterministic: false
+      /args/backend/dsa_indexer_topk_tie_break: 0
+      /args/backend/dsa_indexer_weights_proj_output_dtype: bf16
+      /args/backend/dsa_indexer_weights_proj_use_quantization: true
       /args/backend/encoder_num_layers: 4
-      /args/backend/eval_global_batch_size: 64
+      /args/backend/eval_global_batch_size: 16
       /args/backend/expert_model_parallel_size: 8
       /args/backend/ffn_hidden_size: 33792
-      /args/backend/global_batch_size: 64
+      /args/backend/global_batch_size: 16
       /args/backend/gradient_accumulation_fusion: false
       /args/backend/group_query_attention: false
       /args/backend/hidden_size: 7168
@@ -229,7 +297,7 @@ shared_overrides:
       /args/backend/q_lora_rank: 1536
       /args/backend/rope_type: yarn
       /args/backend/rotary_base: 10000
-      /args/backend/spec: *id008
+      /args/backend/spec: *id009
       /args/backend/tensor_model_parallel_size: 8
       /args/backend/tokenizer_model: /root/models/Kimi-K3-4layer-64experts
       /args/backend/untie_embeddings_and_output_weights: true

@@ -16,32 +16,36 @@ processes:
       train_first_step-0000: {set: {<<: *id002, /role: actor}}
     overrides:
       remove: &id008 [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
-      set: {<<: &id009 {/args/backend/add_position_embedding: true, /args/backend/apply_rope_fusion: false, /args/backend/enable_experimental: false,
-          /args/backend/eval_global_batch_size: 256, /args/backend/ffn_hidden_size: 18432, /args/backend/global_batch_size: 256,
-          /args/backend/hidden_size: 7168, /args/backend/indexer_rope_interleave: false, /args/backend/kv_channels: 128, /args/backend/layernorm_epsilon: 1.0e-06,
-          /args/backend/make_vocab_size_divisible_by: 128, /args/backend/moe_enable_deepep: false, /args/backend/moe_router_group_topk: 4,
-          /args/backend/moe_router_num_groups: 8, /args/backend/moe_token_dispatcher_type: alltoall, /args/backend/mscale_all_dim: 1.0,
-          /args/backend/num_attention_heads: 128, /args/backend/padded_vocab_size: 129536, /args/backend/q_lora_rank: 1536,
-          /args/backend/qk_head_dim: 128, /args/backend/rotary_base: 10000, /args/backend/rotary_scaling_factor: 40.0, /args/backend/tokenizer_model: /root/models/DeepSeek-V3.2-5layer/,
-          /args/backend/v_head_dim: 128, /args/backend/vocab_size: 129280, /args/backend/wandb_project: miles-run_deepseek_v32}}
-    ranks: [0, 1, 2, 3]
+      set: {<<: &id009 {/args/backend/add_position_embedding: true, /args/backend/apply_rope_fusion: false, /args/backend/dsa_cp_balance_indexer: false,
+          /args/backend/dsa_indexer_precision: bf16, /args/backend/dsa_indexer_topk_backend: null, /args/backend/dsa_indexer_topk_deterministic: false,
+          /args/backend/dsa_indexer_topk_tie_break: 0, /args/backend/dsa_indexer_weights_proj_output_dtype: bf16, /args/backend/dsa_indexer_weights_proj_use_quantization: true,
+          /args/backend/enable_experimental: false, /args/backend/eval_global_batch_size: 16, /args/backend/expert_model_parallel_size: 2,
+          /args/backend/ffn_hidden_size: 18432, /args/backend/global_batch_size: 16, /args/backend/hidden_size: 7168, /args/backend/indexer_rope_interleave: false,
+          /args/backend/kv_channels: 128, /args/backend/layernorm_epsilon: 1.0e-06, /args/backend/make_vocab_size_divisible_by: 128,
+          /args/backend/moe_enable_deepep: false, /args/backend/moe_router_group_topk: 4, /args/backend/moe_router_num_groups: 8,
+          /args/backend/moe_token_dispatcher_type: alltoall, /args/backend/mscale_all_dim: 1.0, /args/backend/num_attention_heads: 128,
+          /args/backend/padded_vocab_size: 129280, /args/backend/q_lora_rank: 1536, /args/backend/qk_head_dim: 128, /args/backend/rotary_base: 10000,
+          /args/backend/rotary_scaling_factor: 40.0, /args/backend/tensor_model_parallel_size: 2, /args/backend/tokenizer_model: /root/models/DeepSeek-V3.2-5layer/,
+          /args/backend/v_head_dim: 128, /args/backend/vocab_size: 129280, /args/backend/wandb_project: miles-run_deepseek_v32,
+          /args/backend/world_size: 2}}
+    ranks: [0, 1]
     template: trainer-megatron-01
   tests/e2e/megatron/model_scripts/test_deepseek_v32_5layer_fp8/run-0000/all/default/inference_controller:
     diffs: &id005 {router_endpoints-0000: {set: {<<: &id003 {/args/sglang_model_routers: {default: {$tuple: [$HOST, $PORT]}},
             /args/sglang_router_ip: $HOST, /args/sglang_router_port: $PORT}}}}
     overrides:
       remove: [/args/backend, /args/trainer_actor_index, /args/trainer_role]
-      set: {<<: &id004 {/args/global_batch_size: 256, /args/load: /root/shared_data/$RUN_ID_0000/checkpoints, /args/num_layers: 5,
-          /args/rollout_indexer_topk_num_streams: 5, /args/wandb_project: miles-run_deepseek_v32}, /args/async_save: false,
-        /args/ckpt_step: null, /args/distributed_backend: nccl, /args/distributed_timeout_minutes: 10, /args/eval_interval: null,
-        /args/low_memory_resume: false, /args/micro_batch_size: 1, /args/save: null, /args/save_interval: null, /args/seed: 1234,
-        /args/trainer_init_expected_num_cells: null}
+      set: {<<: &id004 {/args/global_batch_size: 16, /args/num_layers: 5, /args/rollout_indexer_topk_num_streams: 5, /args/wandb_project: miles-run_deepseek_v32},
+        /args/async_save: false, /args/ckpt_step: null, /args/distributed_backend: nccl, /args/distributed_timeout_minutes: 10,
+        /args/eval_interval: null, /args/low_memory_resume: false, /args/micro_batch_size: 1, /args/save: null, /args/save_interval: null,
+        /args/seed: 1234, /args/trainer_init_expected_num_cells: null}
     template: trainer-megatron-01
   tests/e2e/megatron/model_scripts/test_deepseek_v32_5layer_fp8/run-0000/all/default/main:
     diffs:
       router_endpoints-0000: {set: {<<: *id003, /args/wandb_run_id: $WANDB_RUN_ID_0000}}
       tracking_config-0000: {set: {/args/wandb_run_id: $WANDB_RUN_ID_0000}}
     overrides:
+      remove: &id010 [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/sglang/base_args/elastic_ep_rejoin, /args/sglang/base_args/keep_mm_feature_on_device]
       set:
         <<:
         - *id004
@@ -58,12 +62,19 @@ processes:
           /args/raw_megatron/base_args/apply_rope_fusion: false
           /args/raw_megatron/base_args/disable_grad_buffers_cpu_backup: false
           /args/raw_megatron/base_args/disable_param_buffers_cpu_backup: false
+          /args/raw_megatron/base_args/dsa_cp_balance_indexer: false
+          /args/raw_megatron/base_args/dsa_indexer_precision: bf16
+          /args/raw_megatron/base_args/dsa_indexer_topk_backend: null
+          /args/raw_megatron/base_args/dsa_indexer_topk_deterministic: false
+          /args/raw_megatron/base_args/dsa_indexer_topk_tie_break: 0
+          /args/raw_megatron/base_args/dsa_indexer_weights_proj_output_dtype: bf16
+          /args/raw_megatron/base_args/dsa_indexer_weights_proj_use_quantization: true
           /args/raw_megatron/base_args/encoder_num_layers: 5
-          /args/raw_megatron/base_args/eval_global_batch_size: 256
-          /args/raw_megatron/base_args/expert_model_parallel_size: 4
+          /args/raw_megatron/base_args/eval_global_batch_size: 16
+          /args/raw_megatron/base_args/expert_model_parallel_size: 2
           /args/raw_megatron/base_args/ffn_hidden_size: 18432
           /args/raw_megatron/base_args/finetune: false
-          /args/raw_megatron/base_args/global_batch_size: 256
+          /args/raw_megatron/base_args/global_batch_size: 16
           /args/raw_megatron/base_args/group_query_attention: false
           /args/raw_megatron/base_args/hidden_size: 7168
           /args/raw_megatron/base_args/indexer_rope_interleave: false
@@ -94,21 +105,21 @@ processes:
           /args/raw_megatron/base_args/num_query_groups: 1
           /args/raw_megatron/base_args/optimizer_cpu_offload: true
           /args/raw_megatron/base_args/overlap_cpu_optimizer_d2h_h2d: true
-          /args/raw_megatron/base_args/padded_vocab_size: 129536
+          /args/raw_megatron/base_args/padded_vocab_size: 129280
           /args/raw_megatron/base_args/q_lora_rank: 1536
           /args/raw_megatron/base_args/rollout_indexer_topk_num_streams: 5
           /args/raw_megatron/base_args/rope_type: yarn
           /args/raw_megatron/base_args/rotary_base: 10000
           /args/raw_megatron/base_args/rotary_scaling_factor: 40.0
           /args/raw_megatron/base_args/spec: [miles_plugins.models.glm5.glm5, get_glm5_spec]
-          /args/raw_megatron/base_args/tensor_model_parallel_size: 4
+          /args/raw_megatron/base_args/tensor_model_parallel_size: 2
           /args/raw_megatron/base_args/tokenizer_model: /root/models/DeepSeek-V3.2-5layer/
           /args/raw_megatron/base_args/use_precision_aware_optimizer: true
           /args/raw_megatron/base_args/use_rotary_position_embeddings: false
           /args/raw_megatron/base_args/vocab_size: 129280
           /args/raw_megatron/base_args/wandb_project: miles-run_deepseek_v32
-          /args/raw_megatron/base_args/world_size: 4
-          /args/requested_load: /root/shared_data/$RUN_ID_0000/checkpoints
+          /args/raw_megatron/base_args/world_size: 2
+          /args/raw_torchtitan: null
           /args/rollout_num_gpus_per_engine: 2
           /args/router_args/dp_aware: true
           /args/sglang/base_args/attention_backend: nsa
@@ -131,15 +142,45 @@ processes:
         - &id007
           /args/balance_data: true
           /args/check_weight_update_allow_quant_error: true
+          /args/ci_event_root: null
           /args/critic_load: /root/shared_data/$RUN_ID_0000/checkpoints
-          /args/freeze_indexer: true
+          /args/dsa_impl: miles
           /args/hf_checkpoint: /root/models/DeepSeek-V3.2-5layer/
-          /args/log_probs_max_tokens_per_gpu: 32768
-          /args/max_tokens_per_gpu: 32768
+          /args/init_expected_num_cells/default: 1
+          /args/log_probs_max_tokens_per_gpu: 16384
+          /args/max_tokens_per_gpu: 16384
+          /args/n_samples_per_prompt: 4
+          /args/num_gpus_per_node: 4
           /args/ref_load: /root/models/DeepSeek-V3.2-5layer_torch_dist
-          /args/rollout_batch_size: 32
+          /args/rollout_batch_size: 4
+          /args/rollout_sampling_logprobs_mode: selected
+          /args/rollout_top_logprobs_num: 0
+          /args/score_centering_is: none
+          /args/score_centering_mis_high: 5.0
+          /args/score_centering_mis_low: 0.5
+          /args/score_centering_tis_clip: 2.0
+          /args/sglang/base_args/boundary_reduction: auto
+          /args/sglang/base_args/constrained_json_max_whitespace_cnt: null
+          /args/sglang/base_args/cuda_graph_max_seq_len_prefill: null
+          /args/sglang/base_args/cuda_graph_prefill_max_context: null
+          /args/sglang/base_args/disable_aiter_allreduce_fusion_in_decode: false
+          /args/sglang/base_args/disable_aiter_allreduce_fusion_in_prefill: false
+          /args/sglang/base_args/disaggregation_decode_host_receive_threshold: 0.0
+          /args/sglang/base_args/disaggregation_enable_kv_checksum: false
+          /args/sglang/base_args/enable_decoder_swa_bounded_replay: false
+          /args/sglang/base_args/enable_encoder_swa_bounded_replay: false
+          /args/sglang/base_args/enable_linker_mla_dedup: false
+          /args/sglang/base_args/enable_pd_role_switch: false
+          /args/sglang/base_args/grpc_response_timeout_secs: 300
+          /args/sglang/base_args/hicache_host_memory_fraction: 0.8
           /args/sglang/base_args/mem_fraction_static: 0.8
           /args/sglang/base_args/moe_runner_backend: triton
+          /args/sglang/base_args/otlp_service_name: null
+          /args/sglang/base_args/prefill_kv_cache_dequant_dtype: auto
+          /args/sglang/base_args/shared_experts_tp_size: null
+          /args/sglang/base_args/speculative_draft_sink_size: null
+          /args/sglang/base_args/swa_prefix_tails: null
+          /args/sglang/base_args/trust_request_chat_template: false
           /args/sglang/models:
           - model_path: null
             name: default
@@ -149,16 +190,20 @@ processes:
             update_weights: true
           /args/skip_actor_forward_only: true
           /args/start_rollout_id: null
+          /args/wandb_key: $WANDB_KEY_environment
+        - &id011 {/args/load: /root/shared_data/$RUN_ID_0000/checkpoints, /args/requested_load: /root/shared_data/$RUN_ID_0000/checkpoints}
     template: main-01
   tests/e2e/megatron/model_scripts/test_deepseek_v32_5layer_fp8/run-0000/all/default/rollout_executor:
     diffs: *id005
-    overrides: &id010
+    overrides:
+      remove: [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/load, /args/requested_load, /args/sglang/base_args/elastic_ep_rejoin,
+        /args/sglang/base_args/keep_mm_feature_on_device]
       set:
         <<:
         - *id004
         - *id006
         - *id007
-        /args/over_sampling_batch_size: 32
+        /args/over_sampling_batch_size: 4
     template: rollout_executor-01
   tests/e2e/megatron/model_scripts/test_deepseek_v32_5layer_fp8/run-0000/all/default/trainer_controller_actor:
     overrides:
@@ -166,10 +211,24 @@ processes:
       set: {<<: *id009, /args/backend/rank: 0}
     template: trainer-megatron-01
   tests/e2e/megatron/model_scripts/test_deepseek_v32_5layer_fp8/run-0000/all/default/worker_manager:
-    overrides: *id010
+    overrides:
+      remove: *id010
+      set:
+        <<:
+        - *id004
+        - *id006
+        - *id007
+        - *id011
+        /args/actor_num_gpus_per_node: 2
+        /args/over_sampling_batch_size: 4
+        /args/rollout_num_gpus: 2
+        /args/sglang_scaling/groups/default:
+        - {engine_offset: 0, gpu_offset: 0, num_gpus: 2}
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-01:
+    remove: [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/requested_load, /args/sglang/base_args/elastic_ep_rejoin,
+      /args/sglang/base_args/keep_mm_feature_on_device]
     set:
       <<: *id007
       /args/ci_disable_logprobs_checker: false

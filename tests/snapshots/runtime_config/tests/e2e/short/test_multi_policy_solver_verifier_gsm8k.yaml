@@ -1,17 +1,20 @@
 processes:
   tests/e2e/short/test_multi_policy_solver_verifier_gsm8k/run-0000/all/default/inference_controller:
-    diffs: &id007 {router_endpoints-0000: {set: {<<: &id002 {/args/sglang_model_routers: {solver: {$tuple: [$HOST, $PORT]},
+    diffs: &id006 {router_endpoints-0000: {set: {<<: &id002 {/args/sglang_model_routers: {solver: {$tuple: [$HOST, $PORT]},
               verifier: {$tuple: [$HOST, $PORT]}}, /args/sglang_router_ip: $HOST, /args/sglang_router_port: $PORT}}}}
     overrides:
-      remove: &id003 [/args/init_expected_num_cells/default]
+      remove: &id007 [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/init_expected_num_cells/default, /args/load,
+        /args/requested_load, /args/sglang/base_args/elastic_ep_rejoin, /args/sglang/base_args/keep_mm_feature_on_device]
       set:
         <<:
-        - &id004
+        - &id003
           /args/apply_chat_template: false
+          /args/ci_event_root: null
           /args/colocate: false
           /args/config_snapshot_name: tests/e2e/short/test_multi_policy_solver_verifier_gsm8k/run-0000
           /args/critic_save: /root/shared_data/multi_policy_solver_verifier/$RUN_ID_0001/ckpt_critic
           /args/custom_generate_function_path: {config: null, path: examples.multi_policy.solver_verifier.generate}
+          /args/dsa_impl: miles
           /args/enable_sample_ownership_checker: false
           /args/eval_max_response_len: 1024
           /args/eval_prompt_data: [gsm8k, /root/datasets/gsm8k/test.parquet]
@@ -32,11 +35,37 @@ processes:
           /args/rollout_batch_size: 32
           /args/rollout_function_path/config: &id009 {custom_async_data_buffer_path_per_model: null}
           /args/rollout_function_path/path: miles.rollout.fully_async_rollout.FullyAsyncRolloutFn
+          /args/rollout_sampling_logprobs_mode: selected
+          /args/rollout_top_logprobs_num: 0
           /args/save_debug_event_data: /root/shared_data/multi_policy_solver_verifier/$RUN_ID_0001/events
+          /args/score_centering_is: none
+          /args/score_centering_mis_high: 5.0
+          /args/score_centering_mis_low: 0.5
+          /args/score_centering_tis_clip: 2.0
+          /args/sglang/base_args/boundary_reduction: auto
+          /args/sglang/base_args/constrained_json_max_whitespace_cnt: null
           /args/sglang/base_args/cuda_graph_backend_prefill: null
+          /args/sglang/base_args/cuda_graph_max_seq_len_prefill: null
+          /args/sglang/base_args/cuda_graph_prefill_max_context: null
+          /args/sglang/base_args/disable_aiter_allreduce_fusion_in_decode: false
+          /args/sglang/base_args/disable_aiter_allreduce_fusion_in_prefill: false
+          /args/sglang/base_args/disaggregation_decode_host_receive_threshold: 0.0
+          /args/sglang/base_args/disaggregation_enable_kv_checksum: false
+          /args/sglang/base_args/enable_decoder_swa_bounded_replay: false
+          /args/sglang/base_args/enable_encoder_swa_bounded_replay: false
+          /args/sglang/base_args/enable_linker_mla_dedup: false
           /args/sglang/base_args/enable_metrics: true
+          /args/sglang/base_args/enable_pd_role_switch: false
           /args/sglang/base_args/enable_prefill_weight_versions: true
+          /args/sglang/base_args/grpc_response_timeout_secs: 300
+          /args/sglang/base_args/hicache_host_memory_fraction: 0.8
           /args/sglang/base_args/mem_fraction_static: 0.65
+          /args/sglang/base_args/otlp_service_name: null
+          /args/sglang/base_args/prefill_kv_cache_dequant_dtype: auto
+          /args/sglang/base_args/shared_experts_tp_size: null
+          /args/sglang/base_args/speculative_draft_sink_size: null
+          /args/sglang/base_args/swa_prefix_tails: null
+          /args/sglang/base_args/trust_request_chat_template: false
           /args/sglang/models:
           - model_path: /root/models/Qwen2.5-0.5B-Instruct
             name: solver
@@ -49,8 +78,10 @@ processes:
             server_groups:
             - {<<: *id001, overrides: {model_path: /root/models/Qwen3-0.6B}}
             update_weights: true
+          /args/skip_eval_before_train: true
           /args/start_rollout_id: null
-        - &id005 {/args/eps_clip_high: 0.2, /args/eval_interval: 20, /args/global_batch_size: 256, /args/hf_checkpoint: /root/models/Qwen2.5-0.5B-Instruct/,
+          /args/wandb_key: $WANDB_KEY_environment
+        - &id004 {/args/eps_clip_high: 0.2, /args/eval_interval: 20, /args/global_batch_size: 256, /args/hf_checkpoint: /root/models/Qwen2.5-0.5B-Instruct/,
           /args/kl_loss_type: k1, /args/log_probs_max_tokens_per_gpu: 9216, /args/max_tokens_per_gpu: 9216, /args/num_layers: 24,
           /args/ref_load: /root/models/Qwen2.5-0.5B-Instruct/, /args/rollout_max_response_len: 1024, /args/save: /root/shared_data/multi_policy_solver_verifier/$RUN_ID_0001/ckpt,
           /args/save_interval: 2, /args/use_kl_loss: true, /args/wandb_project: miles-test_multi_policy_solver_verifier_gsm8k}
@@ -61,16 +92,24 @@ processes:
         set: {<<: *id002, /args/wandb_run_id: $WANDB_RUN_ID_0000}
       tracking_config-0000: {set: {/args/wandb_run_id: $WANDB_RUN_ID_0000}}
     overrides:
-      remove: *id003
+      remove: [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/init_expected_num_cells/default, /args/sglang/base_args/elastic_ep_rejoin,
+        /args/sglang/base_args/keep_mm_feature_on_device]
       set:
         <<:
+        - *id003
         - *id004
-        - *id005
         - &id008
           /args/raw_megatron/base_args/adam_beta2: 0.999
           /args/raw_megatron/base_args/add_qkv_bias: true
           /args/raw_megatron/base_args/disable_grad_buffers_cpu_backup: false
           /args/raw_megatron/base_args/disable_param_buffers_cpu_backup: false
+          /args/raw_megatron/base_args/dsa_cp_balance_indexer: false
+          /args/raw_megatron/base_args/dsa_indexer_precision: bf16
+          /args/raw_megatron/base_args/dsa_indexer_topk_backend: null
+          /args/raw_megatron/base_args/dsa_indexer_topk_deterministic: false
+          /args/raw_megatron/base_args/dsa_indexer_topk_tie_break: 0
+          /args/raw_megatron/base_args/dsa_indexer_weights_proj_output_dtype: bf16
+          /args/raw_megatron/base_args/dsa_indexer_weights_proj_use_quantization: true
           /args/raw_megatron/base_args/encoder_num_layers: 24
           /args/raw_megatron/base_args/end_weight_decay: 0.01
           /args/raw_megatron/base_args/eval_global_batch_size: 256
@@ -105,7 +144,7 @@ processes:
           /args/raw_megatron/trainers:
           - actor_index: 0
             model_id: solver
-            overrides: {<<: &id006 {adam_beta1: 0.9, adam_beta2: 0.98, add_bias_linear: false, entropy_coef: 0.0, eps_clip: 0.2,
+            overrides: {<<: &id005 {adam_beta1: 0.9, adam_beta2: 0.98, add_bias_linear: false, entropy_coef: 0.0, eps_clip: 0.2,
                 eps_clip_high: 0.28, group_query_attention: true, kl_loss_coef: 0.0, kl_loss_type: low_var_kl, layernorm_epsilon: 1.0e-06,
                 lr_decay_style: constant, normalization: RMSNorm, rotary_base: 1000000, swiglu: true, use_rotary_position_embeddings: true,
                 vocab_size: 151936, weight_decay: 0.1}, add_qkv_bias: true, ffn_hidden_size: 4864, hf_checkpoint: /root/models/Qwen2.5-0.5B-Instruct,
@@ -114,19 +153,20 @@ processes:
             trainer_id: solver-actor
           - actor_index: 1
             model_id: verifier
-            overrides: {<<: *id006, ffn_hidden_size: 3072, hf_checkpoint: /root/models/Qwen3-0.6B, hidden_size: 1024, kv_channels: 128,
+            overrides: {<<: *id005, ffn_hidden_size: 3072, hf_checkpoint: /root/models/Qwen3-0.6B, hidden_size: 1024, kv_channels: 128,
               num_attention_heads: 16, num_layers: 28, num_query_groups: 8, qk_layernorm: true, ref_load: /root/models/Qwen3-0.6B}
             role: actor
             trainer_id: verifier-actor
+          /args/raw_torchtitan: null
     template: main-01
   tests/e2e/short/test_multi_policy_solver_verifier_gsm8k/run-0000/all/default/rollout_executor:
-    diffs: *id007
+    diffs: *id006
     overrides:
-      remove: *id003
+      remove: *id007
       set:
         <<:
+        - *id003
         - *id004
-        - *id005
         - *id008
         - &id019
           /args/ci_assert_prefill_lag_max: 5
@@ -218,11 +258,12 @@ processes:
     template: trainer-megatron-02
   tests/e2e/short/test_multi_policy_solver_verifier_gsm8k/run-0000/all/default/worker_manager:
     overrides:
-      remove: [/args/init_expected_num_cells/default, /args/sglang_scaling/groups/default]
+      remove: [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/init_expected_num_cells/default, /args/sglang/base_args/elastic_ep_rejoin,
+        /args/sglang/base_args/keep_mm_feature_on_device, /args/sglang_scaling/groups/default]
       set:
         <<:
+        - *id003
         - *id004
-        - *id005
         - *id008
         - *id019
         /args/actor_num_gpus_per_node: 1
@@ -234,13 +275,30 @@ processes:
     template: worker_manager-01
 shared_overrides:
   trainer-megatron-02:
-    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng,
-      /args/init_expected_num_cells/default]
+    remove:
+    - /args/backend/ckpt_step
+    - /args/backend/finetune
+    - /args/backend/load
+    - /args/backend/no_load_optim
+    - /args/backend/no_load_rng
+    - /args/ci_logprobs_checker_abs_tol
+    - /args/freeze_indexer
+    - /args/init_expected_num_cells/default
+    - /args/requested_load
+    - /args/sglang/base_args/elastic_ep_rejoin
+    - /args/sglang/base_args/keep_mm_feature_on_device
     set:
-      <<: *id004
+      <<: *id003
       /args/backend/add_qkv_bias: true
       /args/backend/disable_grad_buffers_cpu_backup: false
       /args/backend/disable_param_buffers_cpu_backup: false
+      /args/backend/dsa_cp_balance_indexer: false
+      /args/backend/dsa_indexer_precision: bf16
+      /args/backend/dsa_indexer_topk_backend: null
+      /args/backend/dsa_indexer_topk_deterministic: false
+      /args/backend/dsa_indexer_topk_tie_break: 0
+      /args/backend/dsa_indexer_weights_proj_output_dtype: bf16
+      /args/backend/dsa_indexer_weights_proj_use_quantization: true
       /args/backend/encoder_num_layers: 24
       /args/backend/end_weight_decay: 0.01
       /args/backend/eval_global_batch_size: 256

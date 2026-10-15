@@ -56,11 +56,15 @@ processes:
     template: worker_manager-01
 shared_overrides:
   inference_controller-01:
+    remove: &id010 [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/load, /args/requested_load, /args/sglang/base_args/elastic_ep_rejoin,
+      /args/sglang/base_args/keep_mm_feature_on_device]
     set:
       <<:
       - &id008
         /args/ci_disable_logprobs_checker: true
+        /args/ci_event_root: null
         /args/critic_lr: 1.0e-05
+        /args/dsa_impl: miles
         /args/enable_sample_ownership_checker: false
         /args/hf_checkpoint: /root/models/gpt-oss-20b-bf16/
         /args/hf_lora_targets: [gate_up_proj, down_proj]
@@ -74,12 +78,38 @@ shared_overrides:
         /args/qkv_format: bshd
         /args/rm_type: math
         /args/rollout_num_gpus_per_engine: 4
+        /args/rollout_sampling_logprobs_mode: selected
+        /args/rollout_top_logprobs_num: 0
+        /args/score_centering_is: none
+        /args/score_centering_mis_high: 5.0
+        /args/score_centering_mis_low: 0.5
+        /args/score_centering_tis_clip: 2.0
+        /args/sglang/base_args/boundary_reduction: auto
+        /args/sglang/base_args/constrained_json_max_whitespace_cnt: null
+        /args/sglang/base_args/cuda_graph_max_seq_len_prefill: null
+        /args/sglang/base_args/cuda_graph_prefill_max_context: null
         /args/sglang/base_args/decode_log_interval: 1000
+        /args/sglang/base_args/disable_aiter_allreduce_fusion_in_decode: false
+        /args/sglang/base_args/disable_aiter_allreduce_fusion_in_prefill: false
+        /args/sglang/base_args/disaggregation_decode_host_receive_threshold: 0.0
+        /args/sglang/base_args/disaggregation_enable_kv_checksum: false
         /args/sglang/base_args/dtype: bfloat16
+        /args/sglang/base_args/enable_decoder_swa_bounded_replay: false
+        /args/sglang/base_args/enable_encoder_swa_bounded_replay: false
+        /args/sglang/base_args/enable_linker_mla_dedup: false
+        /args/sglang/base_args/enable_pd_role_switch: false
+        /args/sglang/base_args/grpc_response_timeout_secs: 300
+        /args/sglang/base_args/hicache_host_memory_fraction: 0.8
         /args/sglang/base_args/lora_backend: triton
         /args/sglang/base_args/mem_fraction_static: 0.2
         /args/sglang/base_args/moe_runner_backend: triton
+        /args/sglang/base_args/otlp_service_name: null
+        /args/sglang/base_args/prefill_kv_cache_dequant_dtype: auto
+        /args/sglang/base_args/shared_experts_tp_size: null
+        /args/sglang/base_args/speculative_draft_sink_size: null
+        /args/sglang/base_args/swa_prefix_tails: null
         /args/sglang/base_args/tp_size: 4
+        /args/sglang/base_args/trust_request_chat_template: false
         /args/sglang/models:
         - model_path: null
           name: default
@@ -97,17 +127,25 @@ shared_overrides:
       - &id009 {/args/init_expected_num_cells/default: 1, /args/input_key: prompt, /args/num_layers: 24, /args/rollout_max_response_len: 1024}
       /args/wandb_run_id: null
   main-01:
+    remove: &id012 [/args/ci_logprobs_checker_abs_tol, /args/freeze_indexer, /args/sglang/base_args/elastic_ep_rejoin, /args/sglang/base_args/keep_mm_feature_on_device]
     set:
       <<:
       - *id008
       - *id009
-      - &id010
+      - &id011
         /args/raw_megatron/base_args/add_bias_linear: true
         /args/raw_megatron/base_args/add_qkv_bias: true
         /args/raw_megatron/base_args/apply_rope_fusion: false
         /args/raw_megatron/base_args/attention_backend/name: auto
         /args/raw_megatron/base_args/attention_softmax_in_fp32: false
         /args/raw_megatron/base_args/bias_gelu_fusion: true
+        /args/raw_megatron/base_args/dsa_cp_balance_indexer: false
+        /args/raw_megatron/base_args/dsa_indexer_precision: bf16
+        /args/raw_megatron/base_args/dsa_indexer_topk_backend: null
+        /args/raw_megatron/base_args/dsa_indexer_topk_deterministic: false
+        /args/raw_megatron/base_args/dsa_indexer_topk_tie_break: 0
+        /args/raw_megatron/base_args/dsa_indexer_weights_proj_output_dtype: bf16
+        /args/raw_megatron/base_args/dsa_indexer_weights_proj_use_quantization: true
         /args/raw_megatron/base_args/encoder_num_layers: 24
         /args/raw_megatron/base_args/eval_global_batch_size: 32
         /args/raw_megatron/base_args/ffn_hidden_size: 2880
@@ -140,15 +178,27 @@ shared_overrides:
         /args/raw_megatron/base_args/window_attn_skip_freq: 2
         /args/raw_megatron/base_args/window_size: {$tuple: [128, 0]}
         /args/raw_megatron/base_args/world_size: 4
-  rollout_executor-01: &id011
-    set:
+        /args/raw_torchtitan: null
+  rollout_executor-01:
+    remove: *id010
+    set: &id013
       <<:
       - *id008
       - *id009
-      - *id010
+      - *id011
       /args/wandb_run_id: null
   trainer-megatron-02:
-    remove: [/args/backend/ckpt_step, /args/backend/finetune, /args/backend/load, /args/backend/no_load_optim, /args/backend/no_load_rng]
+    remove:
+    - /args/backend/ckpt_step
+    - /args/backend/finetune
+    - /args/backend/load
+    - /args/backend/no_load_optim
+    - /args/backend/no_load_rng
+    - /args/ci_logprobs_checker_abs_tol
+    - /args/freeze_indexer
+    - /args/requested_load
+    - /args/sglang/base_args/elastic_ep_rejoin
+    - /args/sglang/base_args/keep_mm_feature_on_device
     set:
       <<: *id008
       /args/backend/add_bias_linear: true
@@ -157,6 +207,13 @@ shared_overrides:
       /args/backend/attention_backend/name: auto
       /args/backend/attention_softmax_in_fp32: false
       /args/backend/bias_gelu_fusion: true
+      /args/backend/dsa_cp_balance_indexer: false
+      /args/backend/dsa_indexer_precision: bf16
+      /args/backend/dsa_indexer_topk_backend: null
+      /args/backend/dsa_indexer_topk_deterministic: false
+      /args/backend/dsa_indexer_topk_tie_break: 0
+      /args/backend/dsa_indexer_weights_proj_output_dtype: bf16
+      /args/backend/dsa_indexer_weights_proj_use_quantization: true
       /args/backend/encoder_num_layers: 24
       /args/backend/ffn_hidden_size: 2880
       /args/backend/hidden_size: 2880
@@ -189,4 +246,6 @@ shared_overrides:
       /args/rollout_temperature: 1.0
       /args/use_kl_loss: false
       /args/wandb_run_id: null
-  worker_manager-01: *id011
+  worker_manager-01:
+    remove: *id012
+    set: *id013
