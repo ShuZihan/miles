@@ -15,6 +15,7 @@ import torch.distributed as dist
 from sglang.srt.debug_utils.dumper import DumperConfig, _get_rank, dumper
 
 from miles.backends.sglang_utils.sglang_config import resolve_sglang_config
+from miles.backends.training_utils.model_companion import ModelCompanionInstallationUtils
 from miles.backends.training_utils.parallel import get_parallel_state
 from miles.utils.ft_utils.process_group_utils import GeneralPGUtil
 from miles.utils.retry_utils import retry_until_deadline
@@ -144,7 +145,9 @@ class DumperMegatronUtil:
         # disable lazy cleanup after reset to preserve activations from this rollout.
         dumper.reset()
         dumper.configure(cleanup_previous=False)
-        dumper.dump_model(extracted_model, get_grad=get_grad)
+        # The model companion holds training bookkeeping, not model weights.
+        with ModelCompanionInstallationUtils.hide(model):
+            dumper.dump_model(extracted_model, get_grad=get_grad)
         dumper.step()
         dumper.configure(enable=False)
 
