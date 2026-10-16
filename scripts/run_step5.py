@@ -287,6 +287,8 @@ def train(args: ScriptArgs):
         # routing replay needs materialized top-k ids, and triton is the runner validated so far
         "--sglang-moe-runner-backend triton "
         "--sglang-disable-prefill-cuda-graph "
+        # fp32 logits: rounding them to bf16 adds ~2.5% to the train-rollout log-prob gap
+        "--sglang-enable-fp32-lm-head "
         f"--sglang-cuda-graph-max-bs-decode {128 if args.is_two_node_layout else 32} "
         f"--sglang-mem-fraction-static {0.75 if args.is_two_node_layout else 0.5} "
         # a slice has few full-attention layers, and an unbounded pool overflows the DSA kernels' int32 strides;

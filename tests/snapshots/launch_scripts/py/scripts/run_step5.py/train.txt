@@ -108,6 +108,7 @@ export no_proxy=127.0.0.1 && export PYTHONUNBUFFERED=1 && ray job submit
   --sglang-page-size 64
   --sglang-moe-runner-backend triton
   --sglang-disable-prefill-cuda-graph
+  --sglang-enable-fp32-lm-head
   --sglang-cuda-graph-max-bs-decode 32
   --sglang-mem-fraction-static 0.5
   --sglang-max-total-tokens 1048576 
